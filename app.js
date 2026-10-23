@@ -880,5 +880,5 @@ function inputInSite(title, message, inputLabel) {
   return confirmInSite({ title, message, inputLabel, accept: "Registrar" });
 }
 
-function requestDialogClose(dialog){if(await confirmInSite({title:"Cancelar alterações?",message:"Quer mesmo fechar? As informações preenchidas serão descartadas.",accept:"Descartar",danger:true})){const form=dialog.querySelector("form");if(form)form.reset();dialog.close();}}
+async function requestDialogClose(dialog){if(await confirmInSite({title:"Cancelar alterações?",message:"Quer mesmo fechar? As informações preenchidas serão descartadas.",accept:"Descartar",danger:true})){const form=dialog.querySelector("form");if(form)form.reset();dialog.close();}}
 document.addEventListener("DOMContentLoaded", initialize);
