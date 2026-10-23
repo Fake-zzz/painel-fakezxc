@@ -200,18 +200,19 @@ function addPeriodMonths(dateKey, months) {
 
 function habitPeriodRange(habit,date) {
   const anchor=habit.started_on||date,unit=habit.period_unit||"day",interval=Math.max(1,Number(habit.period_interval||1));
-  let start=anchor;
+  let start=anchor,next;
   if(unit==="day"||unit==="week"){
     const length=interval*(unit==="week"?7:1);
     start=offsetDateFrom(anchor,Math.floor(daysBetween(anchor,date)/length)*length);
+    next=offsetDateFrom(start,length);
   }else{
     const months=interval*(unit==="year"?12:1);
     let count=Math.max(0,Math.floor(((Number(date.slice(0,4))-Number(anchor.slice(0,4)))*12+Number(date.slice(5,7))-Number(anchor.slice(5,7)))/months));
     start=addPeriodMonths(anchor,count*months);
     while(start>date&&count>0)start=addPeriodMonths(anchor,--count*months);
     while(addPeriodMonths(anchor,(count+1)*months)<=date)start=addPeriodMonths(anchor,++count*months);
+    next=addPeriodMonths(anchor,(count+1)*months);
   }
-  const next=unit==="day"?offsetDateFrom(start,interval):unit==="week"?offsetDateFrom(start,interval*7):addPeriodMonths(start,interval*(unit==="year"?12:1));
   return {start,end:offsetDateFrom(next,-1)};
 }
 
