@@ -9,10 +9,27 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0"></script>
+  <script src="supabase-config.js"></script>
   <script src="app.js" defer></script>
 </head>
 <body>
-  <div class="app-shell">
+  <main class="auth-screen" id="auth-screen">
+    <section class="auth-card">
+      <a class="brand auth-brand" href="#"><span class="brand-mark">r</span><span>ritmo</span></a>
+      <div class="eyebrow">SEU ESPAÇO PESSOAL</div>
+      <h1 id="auth-title">Entre no seu espaço</h1>
+      <p class="auth-subtitle">Entre para sincronizar tarefas, metas e hábitos com segurança.</p>
+      <form id="auth-form">
+        <label>E-mail<input name="email" type="email" autocomplete="email" required></label>
+        <label>Senha<input name="password" type="password" minlength="8" autocomplete="current-password" required></label>
+        <button class="primary-button auth-submit" id="auth-submit" type="submit">Entrar</button>
+      </form>
+      <button class="auth-toggle" id="auth-mode-toggle" type="button">Primeiro acesso? Criar conta</button>
+      <p class="auth-message" id="auth-message" role="status" aria-live="polite"></p>
+    </section>
+  </main>
+  <div class="app-shell" id="app-shell" hidden>
     <aside class="sidebar">
       <a class="brand" href="#" aria-label="Ritmo início">
         <span class="brand-mark">r</span><span>ritmo</span>
@@ -25,9 +42,9 @@
         <button class="nav-item" data-view="habitos"><span class="nav-icon">✳</span><span>Hábitos</span></button>
       </nav>
       <div class="sidebar-bottom">
-        <div class="local-note"><span class="status-dot"></span><span>Salvo neste navegador</span></div>
+        <div class="local-note"><span class="status-dot"></span><span id="sync-status">Sincronizado com a nuvem</span></div>
         <div class="profile">
-          <div class="avatar">F</div><div><strong>Meu espaço</strong><small>Protótipo local</small></div>
+          <div class="avatar" id="profile-avatar">R</div><div><strong>Meu espaço</strong><small id="profile-email">Conta Ritmo</small></div>
           <span class="more">···</span>
         </div>
       </div>
@@ -38,6 +55,8 @@
         <button class="mobile-brand" data-view="hoje"><span class="brand-mark">r</span> ritmo</button>
         <div class="breadcrumb"><span>Meu espaço</span><span class="slash">/</span><strong id="breadcrumb-current">Visão geral</strong></div>
         <div class="topbar-actions">
+          <button class="secondary-button settings-open" id="settings-open" type="button">Discord</button>
+          <button class="secondary-button sign-out" id="sign-out" type="button">Sair</button>
           <span class="today-pill"><span class="calendar-icon">▦</span><span id="today-label"></span></span>
           <button class="icon-button" id="quick-add" aria-label="Adicionar tarefa" title="Adicionar tarefa">＋</button>
         </div>
@@ -100,7 +119,8 @@
     <form method="dialog" id="task-form">
       <div class="dialog-top"><div><div class="eyebrow">PLANEJE SEU DIA</div><h2>Nova tarefa</h2></div><button class="close-button" value="cancel" aria-label="Fechar">×</button></div>
       <label>O que você precisa fazer?<input name="title" maxlength="90" placeholder="Ex.: caminhar por 20 minutos" required></label>
-      <div class="form-row"><label>Dia<input name="date" type="date" required></label><label>Horário<input name="time" type="time"></label></div>
+      <div class="form-row"><label>Dia<input name="date" type="date" required></label><label>Horário<input name="time" type="time" required></label></div>
+      <label>Repetição<select name="repeat" class="select-control"><option value="once">Uma vez</option><option value="daily">Todos os dias</option><option value="weekly">Toda semana, no mesmo dia</option></select></label>
       <label class="optional-label">Nota <span>(opcional)</span><textarea name="note" rows="2" maxlength="180" placeholder="Algum detalhe para lembrar?"></textarea></label>
       <div class="dialog-actions"><button class="secondary-button" value="cancel">Cancelar</button><button class="primary-button" type="submit">Adicionar tarefa</button></div>
     </form>
@@ -122,6 +142,17 @@
       <label>Data de início<input name="startDate" type="date" required></label>
       <p class="form-hint">A contagem começa nessa data e continua automaticamente. Você pode reiniciar quando quiser; o histórico fica guardado.</p>
       <div class="dialog-actions"><button class="secondary-button" value="cancel">Cancelar</button><button class="primary-button" type="submit">Criar hábito</button></div>
+    </form>
+  </dialog>
+  <dialog class="form-dialog" id="settings-dialog">
+    <form method="dialog" id="settings-form">
+      <div class="dialog-top"><div><div class="eyebrow">NOTIFICAÇÕES</div><h2>Configurações</h2></div><button class="close-button" value="cancel" aria-label="Fechar">×</button></div>
+      <label>Seu ID de usuário do Discord<input name="discordUserId" inputmode="numeric" maxlength="20" placeholder="Ex.: 123456789012345678"></label>
+      <p class="form-hint">No Discord, ative o Modo Desenvolvedor e use “Copiar ID de usuário”. O bot enviará avisos por mensagem direta.</p>
+      <label>Fuso horário<input name="timezone" value="America/Sao_Paulo" required></label>
+      <label>Horário do resumo diário<input name="summaryTime" type="time" value="21:00" required></label>
+      <label class="settings-checkbox"><input name="summaryEnabled" type="checkbox" checked> Enviar resumo diário</label>
+      <div class="dialog-actions"><button class="secondary-button" value="cancel">Cancelar</button><button class="primary-button" type="submit">Salvar</button></div>
     </form>
   </dialog>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
