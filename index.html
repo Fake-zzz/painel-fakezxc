@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f8f5">
+  <title>Ritmo — seu dia, no seu ritmo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="#" aria-label="Ritmo início">
+        <span class="brand-mark">r</span><span>ritmo</span>
+      </a>
+      <div class="workspace-label">SEU ESPAÇO</div>
+      <nav class="nav-list" aria-label="Navegação principal">
+        <button class="nav-item active" data-view="hoje"><span class="nav-icon">◷</span><span>Visão geral</span></button>
+        <button class="nav-item" data-view="tarefas"><span class="nav-icon">▤</span><span>Tarefas</span><span class="nav-count" id="task-nav-count">0</span></button>
+        <button class="nav-item" data-view="metas"><span class="nav-icon">◎</span><span>Metas</span></button>
+        <button class="nav-item" data-view="habitos"><span class="nav-icon">✳</span><span>Hábitos</span></button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="local-note"><span class="status-dot"></span><span>Salvo neste navegador</span></div>
+        <div class="profile">
+          <div class="avatar">F</div><div><strong>Meu espaço</strong><small>Protótipo local</small></div>
+          <span class="more">···</span>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <button class="mobile-brand" data-view="hoje"><span class="brand-mark">r</span> ritmo</button>
+        <div class="breadcrumb"><span>Meu espaço</span><span class="slash">/</span><strong id="breadcrumb-current">Visão geral</strong></div>
+        <div class="topbar-actions">
+          <span class="today-pill"><span class="calendar-icon">▦</span><span id="today-label"></span></span>
+          <button class="icon-button" id="quick-add" aria-label="Adicionar tarefa" title="Adicionar tarefa">＋</button>
+        </div>
+      </header>
+
+      <div class="page-wrap">
+        <section class="view-panel active" id="view-hoje">
+          <div class="welcome-row">
+            <div><div class="eyebrow" id="greeting">BOM DIA</div><h1>Seu dia, no seu ritmo<span class="heading-period">.</span></h1><p class="page-subtitle">Um passo de cada vez. Você está construindo algo bom.</p></div>
+            <button class="primary-button" data-open="task-dialog"><span>＋</span> Nova tarefa</button>
+          </div>
+
+          <div class="summary-grid">
+            <article class="summary-card summary-green"><div class="summary-top"><span>Progresso de hoje</span><span class="summary-symbol">↗</span></div><div class="summary-value" id="day-progress">0<span>%</span></div><div class="progress-track"><span id="day-progress-bar"></span></div><div class="summary-foot" id="day-progress-foot">Vamos começar?</div></article>
+            <article class="summary-card"><div class="summary-top"><span>Tarefas concluídas</span><span class="summary-symbol symbol-blue">✓</span></div><div class="summary-value" id="tasks-done">0<span class="value-small"> / 0</span></div><div class="summary-foot">Cada pequena entrega conta.</div></article>
+            <article class="summary-card"><div class="summary-top"><span>Meta em destaque</span><span class="summary-symbol symbol-amber">✦</span></div><div class="summary-value" id="goal-highlight">—</div><div class="summary-foot" id="goal-highlight-foot">Adicione sua primeira meta.</div></article>
+          </div>
+
+          <div class="dashboard-grid">
+            <section class="content-card agenda-card">
+              <div class="card-heading"><div><div class="eyebrow">ORGANIZE SEU TEMPO</div><h2>Agenda de hoje</h2></div><button class="text-button" data-view="tarefas">Ver todas <span>→</span></button></div>
+              <div id="today-task-list" class="task-list"></div>
+              <button class="add-inline" data-open="task-dialog"><span>＋</span> Adicionar uma tarefa</button>
+            </section>
+            <section class="content-card water-card">
+              <div class="card-heading"><div><div class="eyebrow">PEQUENOS PASSOS</div><h2>Meta do dia</h2></div><span class="water-drop">◒</span></div>
+              <div id="featured-goal"></div>
+            </section>
+          </div>
+
+          <section class="content-card habit-highlight">
+            <div class="habit-highlight-icon">✳</div>
+            <div class="habit-highlight-copy"><div class="eyebrow">SEU CAMINHO, UM DIA DE CADA VEZ</div><h2 id="highlight-habit-title">Hábitos em construção</h2><p id="highlight-habit-description">A consistência não precisa ser perfeita. Só precisa continuar.</p></div>
+            <div class="streak-display"><strong id="highlight-habit-days">0</strong><span>dias</span></div>
+            <button class="secondary-button" data-view="habitos">Ver hábitos <span>→</span></button>
+          </section>
+        </section>
+
+        <section class="view-panel" id="view-tarefas">
+          <div class="welcome-row"><div><div class="eyebrow">UM PASSO DE CADA VEZ</div><h1>Suas tarefas<span class="heading-period">.</span></h1><p class="page-subtitle">Tire as ideias da cabeça e coloque no seu dia.</p></div><button class="primary-button" data-open="task-dialog"><span>＋</span> Nova tarefa</button></div>
+          <section class="content-card full-card"><div class="card-heading"><div><div class="eyebrow">PLANEJAMENTO</div><h2>Lista de tarefas</h2></div><select id="task-filter" class="select-control" aria-label="Filtrar tarefas"><option value="all">Todas as datas</option><option value="today">Hoje</option><option value="upcoming">Próximas</option><option value="done">Concluídas</option></select></div><div id="all-task-list" class="task-list"></div></section>
+        </section>
+
+        <section class="view-panel" id="view-metas">
+          <div class="welcome-row"><div><div class="eyebrow">O QUE VOCÊ QUER ALCANÇAR?</div><h1>Metas diárias<span class="heading-period">.</span></h1><p class="page-subtitle">Acompanhe seu progresso sem perder de vista o que importa.</p></div><button class="primary-button" data-open="goal-dialog"><span>＋</span> Nova meta</button></div>
+          <div class="goal-grid" id="goal-list"></div>
+        </section>
+
+        <section class="view-panel" id="view-habitos">
+          <div class="welcome-row"><div><div class="eyebrow">CONSISTÊNCIA, NÃO PERFEIÇÃO</div><h1>Seus hábitos<span class="heading-period">.</span></h1><p class="page-subtitle">Acompanhe sua jornada. Recomeçar também faz parte.</p></div><button class="primary-button" data-open="habit-dialog"><span>＋</span> Novo hábito</button></div>
+          <div class="habit-grid" id="habit-list"></div>
+          <div class="gentle-note"><span>✦</span><p>Uma recaída não apaga seu progresso. Seu histórico continua registrado quando você reinicia a contagem.</p></div>
+        </section>
+      </div>
+      <footer class="page-footer"><span>feito para seguir em frente</span><span class="footer-mark">ritmo<span>.</span></span></footer>
+    </main>
+  </div>
+
+  <dialog class="form-dialog" id="task-dialog">
+    <form method="dialog" id="task-form">
+      <div class="dialog-top"><div><div class="eyebrow">PLANEJE SEU DIA</div><h2>Nova tarefa</h2></div><button class="close-button" value="cancel" aria-label="Fechar">×</button></div>
+      <label>O que você precisa fazer?<input name="title" maxlength="90" placeholder="Ex.: caminhar por 20 minutos" required></label>
+      <div class="form-row"><label>Dia<input name="date" type="date" required></label><label>Horário<input name="time" type="time"></label></div>
+      <label class="optional-label">Nota <span>(opcional)</span><textarea name="note" rows="2" maxlength="180" placeholder="Algum detalhe para lembrar?"></textarea></label>
+      <div class="dialog-actions"><button class="secondary-button" value="cancel">Cancelar</button><button class="primary-button" type="submit">Adicionar tarefa</button></div>
+    </form>
+  </dialog>
+
+  <dialog class="form-dialog" id="goal-dialog">
+    <form method="dialog" id="goal-form">
+      <div class="dialog-top"><div><div class="eyebrow">PASSO A PASSO</div><h2>Nova meta diária</h2></div><button class="close-button" value="cancel" aria-label="Fechar">×</button></div>
+      <label>Nome da meta<input name="title" maxlength="70" placeholder="Ex.: Beber água" required></label>
+      <div class="form-row"><label>Quantidade por dia<input name="target" type="number" min="1" max="999" value="8" required></label><label>Unidade<input name="unit" maxlength="24" placeholder="copos" value="vezes" required></label></div>
+      <div class="dialog-actions"><button class="secondary-button" value="cancel">Cancelar</button><button class="primary-button" type="submit">Criar meta</button></div>
+    </form>
+  </dialog>
+
+  <dialog class="form-dialog" id="habit-dialog">
+    <form method="dialog" id="habit-form">
+      <div class="dialog-top"><div><div class="eyebrow">SUA JORNADA</div><h2>Novo hábito</h2></div><button class="close-button" value="cancel" aria-label="Fechar">×</button></div>
+      <label>Qual hábito você quer acompanhar?<input name="title" maxlength="70" placeholder="Ex.: Parar de fumar" required></label>
+      <label>Data de início<input name="startDate" type="date" required></label>
+      <p class="form-hint">A contagem começa nessa data e continua automaticamente. Você pode reiniciar quando quiser; o histórico fica guardado.</p>
+      <div class="dialog-actions"><button class="secondary-button" value="cancel">Cancelar</button><button class="primary-button" type="submit">Criar hábito</button></div>
+    </form>
+  </dialog>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
