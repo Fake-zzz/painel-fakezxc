@@ -1,7 +1,18 @@
 const config = window.RITMO_SUPABASE_CONFIG;
+function takeOAuthError() {
+  const query = new URLSearchParams(window.location.search);
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const text = query.get("error_description") || hash.get("error_description") || query.get("error") || hash.get("error");
+  if (!text) return "";
+  try { window.history.replaceState(null, "", window.location.pathname); } catch (error) { /* ignore */ }
+  return text;
+}
+const initialOAuthError = takeOAuthError();
 const supabaseClient = window.supabase.createClient(config.url, config.publishableKey);
 const STORAGE_KEY = "ritmo-prototype-v1";
 let currentUser = null;
+let activation = null;
+let activationUserId = null;
 let state = { tasks: [], goals: [], habits: [], checkins: [], progress: [], countEntries: [], resets: [], settings: null };
 let toastTimer;
 let today = "";
@@ -358,7 +369,6 @@ function render() {
     ? (mainHabit.category === "count" ? "Acompanhe seus registros e avance no período atual." : "Seu próximo marco está a caminho. Continue no seu ritmo.")
     : "A consistência não precisa ser perfeita. Só precisa continuar.";
   updateDiscordProfile();
-  document.getElementById("profile-avatar").textContent = (currentUser.email || "R").slice(0, 1).toUpperCase();
   document.getElementById("sync-status").textContent = "Sincronizado com a nuvem";
 }
 
@@ -459,13 +469,35 @@ function setSignedOut() {
   document.getElementById("auth-screen").hidden = false;
 }
 
-async function activateUser(user) {
-  currentUser = user;
+function showAuthMessage(text) {
+  document.getElementById("auth-message").textContent = text || "";
+  document.getElementById("discord-login").disabled = false;
+}
+
+async function rejectSession(message) {
+  try { await supabaseClient.auth.signOut(); } catch (error) { console.error("Erro ao encerrar sessão:", error); }
+  setSignedOut();
+  showAuthMessage(message);
+}
+
+function activateUser(user) {
+  if (activation && activationUserId === user.id) return activation;
+  if (currentUser && currentUser.id === user.id && !document.getElementById("app-shell").hidden) {
+    currentUser = user;
+    return Promise.resolve(true);
+  }
+  activationUserId = user.id;
+  activation = prepareUser(user).finally(() => { activation = null; activationUserId = null; });
+  return activation;
+}
+
+async function prepareUser(user) {
   const discord = discordIdentity(user);
-  document.getElementById("auth-screen").hidden = true;
-  document.getElementById("app-shell").hidden = false;
+  if (!discord.id || !/^\d{17,20}$/.test(discord.id)) {
+    await rejectSession("Esta sessão não veio do Discord. Entre com sua conta do Discord para usar o Ritmo.");
+    return false;
+  }
   try {
-    if (!discord.id || !/^\d{17,20}$/.test(discord.id)) throw new Error("Não foi possível identificar sua conta do Discord. Saia e entre novamente.");
     const created = await supabaseClient.from("ritmo").upsert({
       user_id: user.id, discord_user_id: discord.id,
       discord_linked_at: new Date().toISOString(), timezone: "America/Sao_Paulo"
@@ -479,10 +511,17 @@ async function activateUser(user) {
       }).eq("user_id", user.id);
       if (linked.error) throw linked.error;
     }
-    await refreshData(); updateDiscordProfile();
+    currentUser = user;
+    await loadData();
+    document.getElementById("auth-screen").hidden = true;
+    document.getElementById("app-shell").hidden = false;
+    document.getElementById("auth-message").textContent = "";
+    updateDiscordProfile();
+    return true;
   } catch (error) {
     console.error("Não foi possível preparar a conta do Ritmo:", error);
-    showToast(error.message || "Não foi possível preparar sua conta.");
+    await rejectSession("Não foi possível preparar sua conta: " + (error.message || "erro desconhecido") + ". Tente entrar novamente.");
+    return false;
   }
 }
 
@@ -519,14 +558,15 @@ function initializeEvents() {
   document.getElementById("confirm-cancel").addEventListener("click", () => settleConfirmation(null));
   document.getElementById("confirm-dialog").addEventListener("cancel", (event) => { event.preventDefault(); settleConfirmation(null); });
   document.getElementById("settings-open").addEventListener("click", () => {
-    const form = document.getElementById("settings-form");
-    form.elements.notificationsEnabled.checked = !!state.settings.discord_notifications_enabled;
-    form.elements.notifyHabitMilestones.checked = !!state.settings.notify_habit_milestones;
-    form.elements.notifyGoals.checked = !!state.settings.notify_goals;
-    form.elements.notifyTasks.checked = !!state.settings.notify_tasks;
-    form.elements.summaryEnabled.checked = !!state.settings.daily_summary_enabled;
-    form.elements.timezone.value = state.settings.timezone || "America/Sao_Paulo";
-    form.elements.summaryTime.value = String(state.settings.daily_summary_time || "21:00").slice(0, 5);
+    const form = document.getElementById("settings-form"), settings = state.settings || {};
+    form.elements.notificationsEnabled.checked = settings.discord_notifications_enabled !== false;
+    form.elements.notifyHabitMilestones.checked = settings.notify_habit_milestones !== false;
+    form.elements.notifyGoals.checked = settings.notify_goals !== false;
+    form.elements.notifyTasks.checked = settings.notify_tasks !== false;
+    form.elements.summaryEnabled.checked = !!settings.daily_summary_enabled;
+    form.elements.timezone.value = settings.timezone || "America/Sao_Paulo";
+    form.elements.summaryTime.value = String(settings.daily_summary_time || "21:00").slice(0, 5);
+    document.querySelector('[data-settings-tab="notifications"]').click();
     setNotificationControls(false); updateDiscordProfile();
     document.getElementById("settings-dialog").showModal();
   });
@@ -770,7 +810,7 @@ function initializeEvents() {
 }
 
 async function initialize() {
-  document.getElementById("auth-message").textContent = "";
+  document.getElementById("auth-message").textContent = initialOAuthError ? "Não foi possível entrar com o Discord: " + initialOAuthError : "";
   const secure = window.isSecureContext || ["localhost", "127.0.0.1"].includes(window.location.hostname);
   if (!secure) {
     document.getElementById("discord-login").hidden = true;
