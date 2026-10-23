@@ -17,3 +17,38 @@
 .settings-checkbox{display:flex!important;grid-template-columns:auto 1fr!important;align-items:center;gap:9px!important}
 .settings-checkbox input{width:16px;height:16px}
 @media(max-width:540px){.auth-card{padding:27px 21px}.topbar-actions{gap:5px}.settings-open,.sign-out{height:30px;padding:0 8px;font-size:10px}.today-pill{display:none}}
+
+/* Tema escuro do Ritmo */
+:root{--ink:#e6e9ed;--muted:#a1aab3;--paper:#101419;--white:#1a2027;--line:#2c343d;--green:#57b58a;--green-dark:#9ad8b8;--mint:#202d27;--blue:#202c39;--amber:#302c21;--shadow:0 12px 36px rgba(0,0,0,.28);color-scheme:dark}
+body{background:#101419;color:#e6e9ed}
+.sidebar,.content-card,.summary-card,.goal-card,.habit-card,.form-dialog,.profile{background:#1a2027;color:#e6e9ed;border-color:#2c343d}
+.sidebar{background:#151a20}.auth-screen .auth-card{background:#1a2027;color:#e6e9ed}
+.brand,.mobile-brand,.nav-item,.task-title,.goal-card-title,.habit-card-title,.calendar-day{color:#e6e9ed}
+.nav-item:hover,.nav-item.active{background:#26382f;color:#9ad8b8}
+.summary-green{background:#1d3027;border-color:#2a4537}
+input,textarea,.select-control,.form-dialog select{background:#11171d;color:#e6e9ed;border-color:#39434e}
+input::placeholder,textarea::placeholder{color:#79838d}
+.secondary-button,.icon-button,.step-button{background:#222a32;color:#dbe1e6;border-color:#3a444f}
+.secondary-button:hover,.icon-button:hover,.step-button:hover{background:#2a343e}
+.primary-button{color:#07130d}.form-dialog::backdrop{background:rgba(0,0,0,.72)}
+.calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px}
+.calendar-weekday{padding:8px 4px;text-align:center;color:#8f9aa5;font-size:11px;font-weight:700}
+.calendar-day{min-height:105px;padding:7px;border:1px solid #2c343d;border-radius:10px;background:#171d23;text-align:left;display:flex;flex-direction:column;gap:5px;overflow:hidden}
+.calendar-day:hover,.calendar-day.is-selected{border-color:#57b58a;background:#202c27}.calendar-day.outside-month{opacity:.5}
+.calendar-day.is-today .calendar-day-number{color:#7ed5a7}.calendar-day-number{font-weight:700;font-size:12px}
+.calendar-day-events{display:grid;gap:3px}.calendar-chip{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-radius:4px;padding:2px 4px;font-size:9px}
+.task-chip{background:#20394b;color:#a9d8fa}.goal-chip{background:#383421;color:#eedb8c}.habit-chip{background:#263c31;color:#a9e0be}
+.calendar-no-events{color:#59636d;font-size:10px}.calendar-toolbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+.calendar-toolbar h2{margin:0;text-transform:capitalize}.calendar-details{margin-top:16px}
+.calendar-detail-row,.preview-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #2c343d}
+.calendar-detail-row:last-child,.preview-row:last-child{border-bottom:0}.calendar-detail-row>div,.preview-row>div{display:grid;gap:3px;flex:1}
+.calendar-detail-row small,.preview-row small{color:#9da7b0}.calendar-detail-type,.preview-date{color:#75c79a;font-size:11px;font-weight:700}
+.calendar-detail-icon{color:#86d1a5;font-size:18px}.count-habit-rule{margin:16px 0 4px;color:#b4c0ca;font-size:12px}
+.overview-calendar-card{margin-top:18px}.preview-row{font-size:13px}.preview-date{min-width:70px}
+.weekday-options{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 12px}.weekday-options label{display:flex;align-items:center;gap:5px;padding:7px 10px;border:1px solid #39434e;border-radius:8px}.weekday-options input{width:auto}
+@media(max-width:760px){.calendar-day{min-height:75px;padding:4px}.calendar-chip{font-size:8px}.calendar-weekday{font-size:9px}.calendar-grid{gap:2px}}
+
+.auth-screen{background:radial-gradient(circle at 15% 15%,#1d3027,transparent 38%),#101419}
+.goal-card-icon,.habit-card-icon,.summary-symbol,.check-button:not(.done){background:#26332c;color:#91d7af}
+.nav-count,.task-meta,.small-muted,.goal-target,.habit-card-sub,.summary-foot{color:#9ca7b0}
+.reset-chip{background:#3a2930;color:#efacb6}
