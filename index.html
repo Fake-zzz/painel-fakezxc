@@ -19,13 +19,8 @@
       <a class="brand auth-brand" href="#"><span class="brand-mark">r</span><span>ritmo</span></a>
       <div class="eyebrow">SEU ESPAÇO PESSOAL</div>
       <h1 id="auth-title">Entre no seu espaço</h1>
-      <p class="auth-subtitle">Entre para sincronizar tarefas, metas e hábitos com segurança.</p>
-      <form id="auth-form">
-        <label>E-mail<input name="email" type="email" autocomplete="email" required></label>
-        <label>Senha<input name="password" type="password" minlength="8" autocomplete="current-password" required></label>
-        <button class="primary-button auth-submit" id="auth-submit" type="submit">Entrar</button>
-      </form>
-      <button class="auth-toggle" id="auth-mode-toggle" type="button">Primeiro acesso? Criar conta</button>
+      <p class="auth-subtitle">Entre com sua conta do Discord para sincronizar seu espaço e receber notificações por mensagem direta.</p>
+      <button class="primary-button auth-submit discord-login" id="discord-login" type="button"><span class="discord-mark">◉</span> Continuar com Discord</button>
       <p class="auth-message" id="auth-message" role="status" aria-live="polite"></p>
     </section>
   </main>
@@ -44,10 +39,8 @@
       </nav>
       <div class="sidebar-bottom">
         <div class="local-note"><span class="status-dot"></span><span id="sync-status">Sincronizado com a nuvem</span></div>
-        <div class="profile">
-          <div class="avatar" id="profile-avatar">R</div><div><strong>Meu espaço</strong><small id="profile-email">Conta Ritmo</small></div>
-          <span class="more">···</span>
-        </div>
+        <button class="sidebar-settings" id="settings-open" type="button"><span>⚙</span> Configurações</button>
+        <div class="profile"><img class="avatar" id="profile-avatar" alt="Foto do Discord"><div class="profile-copy"><strong id="profile-name">Meu espaço</strong><small id="profile-username">@discord</small></div></div>
       </div>
     </aside>
 
@@ -56,8 +49,7 @@
         <button class="mobile-brand" data-view="hoje"><span class="brand-mark">r</span> ritmo</button>
         <div class="breadcrumb"><span>Meu espaço</span><span class="slash">/</span><strong id="breadcrumb-current">Visão geral</strong></div>
         <div class="topbar-actions">
-          <button class="secondary-button settings-open" id="settings-open" type="button">Discord</button>
-          <button class="secondary-button sign-out" id="sign-out" type="button">Sair</button>
+          
           <span class="today-pill"><span class="calendar-icon">▦</span><span id="today-label"></span></span>
           <button class="icon-button" id="quick-add" aria-label="Adicionar tarefa" title="Adicionar tarefa">＋</button>
         </div>
@@ -160,15 +152,41 @@
       <div class="dialog-actions"><button class="secondary-button" type="button" data-dialog-cancel>Cancelar</button><button class="primary-button" type="submit">Criar hábito</button></div>
     </form>
   </dialog>
-  <dialog class="form-dialog" id="settings-dialog">
-    <form method="dialog" id="settings-form">
-      <div class="dialog-top"><div><div class="eyebrow">NOTIFICAÇÕES</div><h2>Configurações</h2></div><button class="close-button" type="button" data-dialog-cancel aria-label="Fechar">×</button></div>
-      <label>Seu ID de usuário do Discord<input name="discordUserId" inputmode="numeric" maxlength="20" placeholder="Ex.: 123456789012345678"></label>
-      <p class="form-hint">No Discord, ative o Modo Desenvolvedor e use “Copiar ID de usuário”. O bot enviará avisos por mensagem direta.</p>
-      <label>Fuso horário<input name="timezone" value="America/Sao_Paulo" required></label>
-      <label>Horário do resumo diário<input name="summaryTime" type="time" value="21:00" required></label>
-      <label class="settings-checkbox"><input name="summaryEnabled" type="checkbox" checked> Enviar resumo diário</label>
-      <div class="dialog-actions"><button class="secondary-button" type="button" data-dialog-cancel>Cancelar</button><button class="primary-button" type="submit">Salvar</button></div>
+  <dialog class="form-dialog settings-dialog" id="settings-dialog">
+    <div class="settings-shell">
+      <div class="dialog-top"><div><div class="eyebrow">SEU ESPAÇO</div><h2>Configurações</h2></div><button class="close-button" id="settings-close" type="button" aria-label="Fechar">×</button></div>
+      <div class="settings-tabs" role="tablist">
+        <button class="settings-tab active" type="button" role="tab" aria-selected="true" data-settings-tab="notifications">Notificações</button>
+        <button class="settings-tab" type="button" role="tab" aria-selected="false" data-settings-tab="account">Conta</button>
+      </div>
+      <section class="settings-panel active" id="settings-notifications" role="tabpanel">
+        <form id="settings-form">
+          <label class="settings-checkbox settings-master"><input name="notificationsEnabled" type="checkbox"> Ativar notificações do Discord</label>
+          <p class="form-hint">Quando desligado, o Ritmo pausa todos os avisos e resumos enviados pelo bot.</p>
+          <div class="notification-options" id="notification-options">
+            <label class="settings-checkbox"><input name="notifyHabitMilestones" type="checkbox"> Marcos de hábitos</label>
+            <label class="settings-checkbox"><input name="notifyGoals" type="checkbox"> Metas concluídas</label>
+            <label class="settings-checkbox"><input name="notifyTasks" type="checkbox"> Lembretes de tarefas</label>
+            <label class="settings-checkbox"><input name="summaryEnabled" type="checkbox"> Resumo diário</label>
+            <label>Horário do resumo diário<input name="summaryTime" type="time" value="21:00" required></label>
+          </div>
+          <label>Fuso horário<input name="timezone" value="America/Sao_Paulo" required></label>
+          <div class="dialog-actions"><button class="primary-button" type="submit">Salvar notificações</button></div>
+        </form>
+      </section>
+      <section class="settings-panel" id="settings-account" role="tabpanel" hidden>
+        <div class="account-summary"><img class="account-avatar" id="account-avatar" alt=""><div><strong id="account-display-name"></strong><span id="account-username"></span></div></div>
+        <dl class="account-details"><div><dt>Usuário do Discord</dt><dd id="account-discord-id"></dd></div><div><dt>E-mail</dt><dd id="account-email">Não compartilhado</dd></div><div><dt>Conta criada</dt><dd id="account-created-at"></dd></div></dl>
+        <div class="account-actions"><button class="secondary-button" id="account-logout" type="button">Fazer logout</button><button class="danger-button" id="account-delete" type="button">Excluir conta e dados</button></div>
+      </section>
+    </div>
+  </dialog>
+  <dialog class="form-dialog confirm-dialog" id="confirm-dialog">
+    <form id="confirm-form">
+      <div class="dialog-top"><div><div class="eyebrow">CONFIRMAÇÃO</div><h2 id="confirm-title"></h2></div></div>
+      <p class="confirm-message" id="confirm-message"></p>
+      <label id="confirm-input-wrap" hidden><span id="confirm-input-label"></span><input id="confirm-input" type="number" min="0.01" step="0.01" value="1"></label>
+      <div class="dialog-actions"><button class="secondary-button" id="confirm-cancel" type="button">Cancelar</button><button class="primary-button" id="confirm-accept" type="submit">Confirmar</button></div>
     </form>
   </dialog>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
