@@ -52,3 +52,42 @@ input::placeholder,textarea::placeholder{color:#79838d}
 .goal-card-icon,.habit-card-icon,.summary-symbol,.check-button:not(.done){background:#26332c;color:#91d7af}
 .nav-count,.task-meta,.small-muted,.goal-target,.habit-card-sub,.summary-foot{color:#9ca7b0}
 .reset-chip{background:#3a2930;color:#efacb6}
+
+/* Login Discord e preferencias da conta */
+.sidebar-settings{width:100%;display:flex;align-items:center;gap:10px;padding:10px 11px;margin:10px 0 6px;border:1px solid var(--line);border-radius:9px;background:#1a2027;color:var(--ink);font-size:12px;font-weight:700;text-align:left;cursor:pointer}
+.sidebar-settings:hover,.settings-tab:hover{border-color:var(--green)}
+.sidebar-settings span{font-size:16px;color:var(--green-dark)}
+.profile{border-top:0!important;padding:8px 5px 2px!important}
+.profile-copy{min-width:0}.profile-copy strong,.profile-copy small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:145px}
+.avatar{object-fit:cover;background:#27352d;color:#9ad8b8}
+.topbar{background:#151a20!important}
+.discord-login{width:100%;min-height:46px;background:#5865f2;color:#fff}
+.discord-login:hover{background:#4752c4}
+.discord-mark{font-size:17px}
+.settings-dialog{width:min(540px,calc(100% - 28px));max-height:min(88vh,760px);overflow:auto}
+.settings-shell{display:grid;gap:18px}
+.settings-tabs{display:flex;gap:8px;border-bottom:1px solid var(--line)}
+.settings-tab{padding:10px 13px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--muted);font-size:12px;font-weight:700;cursor:pointer}
+.settings-tab.active{border-bottom-color:var(--green);color:var(--green-dark)}
+.settings-panel[hidden]{display:none}
+.settings-panel form{display:grid;gap:14px}
+.settings-master{padding:12px;border:1px solid #35453b;border-radius:10px;background:#1d3027}
+.notification-options{display:grid;gap:13px;padding:0 4px 2px}
+.notification-options.disabled{opacity:.48}
+.settings-dialog .form-hint{margin-top:-8px}
+.settings-dialog input:disabled{opacity:.55;cursor:not-allowed}
+.account-summary{display:flex;align-items:center;gap:13px;padding:14px;border:1px solid var(--line);border-radius:11px;background:#151a20}
+.account-avatar{width:48px;height:48px;object-fit:cover;border-radius:50%;background:#27352d}
+.account-summary strong,.account-summary span{display:block}
+.account-summary strong{font-size:14px}.account-summary span{margin-top:3px;color:var(--muted);font-size:11px}
+.account-details{display:grid;gap:0;margin:0}
+.account-details div{display:grid;grid-template-columns:145px 1fr;gap:12px;padding:12px 4px;border-bottom:1px solid var(--line)}
+.account-details dt{color:var(--muted);font-size:11px}.account-details dd{margin:0;font-size:12px;overflow-wrap:anywhere}
+.account-actions{display:flex;justify-content:space-between;gap:10px;padding-top:8px}
+.danger-button{min-height:40px;padding:0 14px;border:1px solid #8b4247;border-radius:9px;background:#58282e;color:#ffd8db;font-size:12px;font-weight:700;cursor:pointer}
+.danger-button:hover{background:#71343b}
+.confirm-dialog{width:min(420px,calc(100% - 28px))}
+.confirm-dialog form{display:grid;gap:14px}
+.confirm-message{margin:0;color:var(--muted);font-size:13px;line-height:1.6}
+.confirm-dialog .dialog-top{margin-bottom:0}
+@media(max-width:620px){.settings-dialog{padding:20px}.account-details div{grid-template-columns:1fr;gap:5px}.account-actions{flex-direction:column-reverse}.account-actions button{width:100%}}
