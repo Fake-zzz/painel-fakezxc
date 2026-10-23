@@ -829,7 +829,7 @@ function updateHabitMeasureFields(){
  const custom=document.getElementById("habit-measure-unit").value==="custom";
  setSectionDisabled("custom-unit-wrap",!custom);
 }
-async let confirmResolver = null;
+let confirmResolver = null;
 function setNotificationControls(changed) {
   const form = document.getElementById("settings-form");
   const enabled = form.elements.notificationsEnabled.checked;
