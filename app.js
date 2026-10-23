@@ -4,11 +4,9 @@ const STORAGE_KEY = "ritmo-prototype-v1";
 let currentUser = null;
 let state = { tasks: [], goals: [], habits: [], checkins: [], progress: [], countEntries: [], resets: [], settings: null };
 let toastTimer;
-let authMode = "signin";
 let today = "";
 let calendarCursor = null;
 let selectedCalendarDate = null;
-let settingsPromptedForUser = null;
 
 function activeTimezone() {
   return (state.settings && state.settings.timezone) || "America/Sao_Paulo";
@@ -359,7 +357,7 @@ function render() {
   document.getElementById("highlight-habit-description").textContent = mainHabit
     ? (mainHabit.category === "count" ? "Acompanhe seus registros e avance no período atual." : "Seu próximo marco está a caminho. Continue no seu ritmo.")
     : "A consistência não precisa ser perfeita. Só precisa continuar.";
-  document.getElementById("profile-email").textContent = currentUser.email || "Conta Ritmo";
+  updateDiscordProfile();
   document.getElementById("profile-avatar").textContent = (currentUser.email || "R").slice(0, 1).toUpperCase();
   document.getElementById("sync-status").textContent = "Sincronizado com a nuvem";
 }
@@ -422,23 +420,36 @@ function switchView(name) {
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
-function setAuthMode(mode) {
-  authMode = mode;
-  document.getElementById("auth-title").textContent = mode === "signin" ? "Entre no seu espaço" : "Crie sua conta";
-  document.getElementById("auth-submit").textContent = mode === "signin" ? "Entrar" : "Criar conta";
-  document.getElementById("auth-mode-toggle").textContent = mode === "signin" ? "Primeiro acesso? Criar conta" : "Já tem conta? Entrar";
-  document.getElementById("auth-message").textContent = "";
+function discordIdentity(user = currentUser) {
+  if (!user) return {};
+  const identity = (user.identities || []).find((item) => item.provider === "discord") || {};
+  const metadata = identity.identity_data || user.user_metadata || {};
+  const id = String(identity.provider_id || metadata.provider_id || metadata.sub || metadata.id || "");
+  const username = metadata.global_name || metadata.full_name || metadata.name || metadata.username || metadata.user_name || metadata.preferred_username || "Discord";
+  const handle = metadata.username || metadata.user_name || metadata.preferred_username || username;
+  let avatar = metadata.avatar_url || metadata.picture || "";
+  if (!avatar && id && metadata.avatar) avatar = "https://cdn.discordapp.com/avatars/" + encodeURIComponent(id) + "/" + encodeURIComponent(metadata.avatar) + ".png";
+  if (!/^https:\/\/(cdn\.discordapp\.com|media\.discordapp\.net)\//i.test(avatar)) avatar = "";
+  return { id, username: String(username), handle: String(handle), avatar };
 }
 
-async function activateUser(user) {
-  currentUser = user;
-  document.getElementById("auth-screen").hidden = true;
-  document.getElementById("app-shell").hidden = false;
-  await refreshData();
-  if (state.settings && !state.settings.discord_user_id && settingsPromptedForUser !== user.id) {
-    settingsPromptedForUser = user.id;
-    document.getElementById("settings-open").click();
-  }
+function updateDiscordProfile() {
+  if (!currentUser) return;
+  const discord = discordIdentity(), name = discord.username || "Discord";
+  document.getElementById("profile-name").textContent = name;
+  document.getElementById("profile-username").textContent = "@" + (discord.handle || name);
+  const avatar = document.getElementById("profile-avatar");
+  if (discord.avatar) avatar.src = discord.avatar; else avatar.removeAttribute("src");
+  avatar.alt = "Foto de " + name;
+  const accountAvatar = document.getElementById("account-avatar");
+  if (discord.avatar) accountAvatar.src = discord.avatar; else accountAvatar.removeAttribute("src");
+  document.getElementById("account-display-name").textContent = name;
+  document.getElementById("account-username").textContent = "@" + (discord.handle || name);
+  document.getElementById("account-discord-id").textContent = discord.id || state.settings?.discord_user_id || "Não disponível";
+  document.getElementById("account-email").textContent = currentUser.email || "Não compartilhado pelo Discord";
+  const created = currentUser.created_at ? new Date(currentUser.created_at) : null;
+  document.getElementById("account-created-at").textContent = created && !Number.isNaN(created.getTime())
+    ? new Intl.DateTimeFormat("pt-BR", { dateStyle: "long" }).format(created) : "Não disponível";
 }
 
 function setSignedOut() {
@@ -446,6 +457,33 @@ function setSignedOut() {
   state = { tasks: [], goals: [], habits: [], checkins: [], progress: [], countEntries: [], resets: [], settings: null };
   document.getElementById("app-shell").hidden = true;
   document.getElementById("auth-screen").hidden = false;
+}
+
+async function activateUser(user) {
+  currentUser = user;
+  const discord = discordIdentity(user);
+  document.getElementById("auth-screen").hidden = true;
+  document.getElementById("app-shell").hidden = false;
+  try {
+    if (!discord.id || !/^\d{17,20}$/.test(discord.id)) throw new Error("Não foi possível identificar sua conta do Discord. Saia e entre novamente.");
+    const created = await supabaseClient.from("ritmo").upsert({
+      user_id: user.id, discord_user_id: discord.id,
+      discord_linked_at: new Date().toISOString(), timezone: "America/Sao_Paulo"
+    }, { onConflict: "user_id", ignoreDuplicates: true });
+    if (created.error) throw created.error;
+    const { data: profile, error: profileError } = await supabaseClient.from("ritmo").select("discord_user_id,discord_linked_at").eq("user_id", user.id).single();
+    if (profileError) throw profileError;
+    if (profile.discord_user_id !== discord.id || !profile.discord_linked_at) {
+      const linked = await supabaseClient.from("ritmo").update({
+        discord_user_id: discord.id, discord_linked_at: new Date().toISOString(), discord_setup_notified_at: null
+      }).eq("user_id", user.id);
+      if (linked.error) throw linked.error;
+    }
+    await refreshData(); updateDiscordProfile();
+  } catch (error) {
+    console.error("Não foi possível preparar a conta do Ritmo:", error);
+    showToast(error.message || "Não foi possível preparar sua conta.");
+  }
 }
 
 async function runAction(action) {
@@ -462,87 +500,77 @@ async function runAction(action) {
 }
 
 function initializeEvents() {
-  document.getElementById("auth-mode-toggle").addEventListener("click", () => {
-    setAuthMode(authMode === "signin" ? "signup" : "signin");
-  });
-
-  document.getElementById("auth-form").addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const email = String(form.get("email") || "").trim();
-    const password = String(form.get("password") || "");
-    const message = document.getElementById("auth-message");
-    const submit = document.getElementById("auth-submit");
-    submit.disabled = true;
-    message.textContent = authMode === "signin" ? "Entrando..." : "Criando sua conta...";
+  document.getElementById("discord-login").addEventListener("click", async () => {
+    const message = document.getElementById("auth-message"), button = document.getElementById("discord-login");
+    button.disabled = true; message.textContent = "Conectando ao Discord...";
     try {
-      if (authMode === "signin") {
-        const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        await activateUser(data.user);
-      } else {
-        const { data, error } = await supabaseClient.auth.signUp({
-          email,
-          password,
-          options: { emailRedirectTo: window.location.href.split("#")[0] }
-        });
-        if (error) throw error;
-        if (data.session && data.user) {
-          await activateUser(data.user);
-        } else {
-          message.textContent = "Conta criada. Confirme o e-mail enviado para entrar.";
-        }
-      }
-    } catch (error) {
-      message.textContent = error.message || "Não foi possível autenticar.";
-    } finally {
-      submit.disabled = false;
-    }
+      const { error } = await supabaseClient.auth.signInWithOAuth({
+        provider: "discord", options: { redirectTo: window.location.href.split("#")[0], scopes: "identify email" }
+      });
+      if (error) throw error;
+    } catch (error) { message.textContent = error.message || "Não foi possível iniciar o login com Discord."; button.disabled = false; }
   });
 
-  document.getElementById("sign-out").addEventListener("click", async () => {
-    const { error } = await supabaseClient.auth.signOut();
-    if (error) showToast(error.message);
-    else setSignedOut();
+  document.getElementById("confirm-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const wrap = document.getElementById("confirm-input-wrap");
+    settleConfirmation(wrap.hidden ? true : document.getElementById("confirm-input").value);
   });
-
+  document.getElementById("confirm-cancel").addEventListener("click", () => settleConfirmation(null));
+  document.getElementById("confirm-dialog").addEventListener("cancel", (event) => { event.preventDefault(); settleConfirmation(null); });
   document.getElementById("settings-open").addEventListener("click", () => {
     const form = document.getElementById("settings-form");
-    form.elements.discordUserId.value = state.settings.discord_user_id || "";
+    form.elements.notificationsEnabled.checked = !!state.settings.discord_notifications_enabled;
+    form.elements.notifyHabitMilestones.checked = !!state.settings.notify_habit_milestones;
+    form.elements.notifyGoals.checked = !!state.settings.notify_goals;
+    form.elements.notifyTasks.checked = !!state.settings.notify_tasks;
+    form.elements.summaryEnabled.checked = !!state.settings.daily_summary_enabled;
     form.elements.timezone.value = state.settings.timezone || "America/Sao_Paulo";
     form.elements.summaryTime.value = String(state.settings.daily_summary_time || "21:00").slice(0, 5);
-    form.elements.summaryEnabled.checked = !!state.settings.daily_summary_enabled;
+    setNotificationControls(false); updateDiscordProfile();
     document.getElementById("settings-dialog").showModal();
   });
 
   document.getElementById("settings-form").addEventListener("submit", async (event) => {
     event.preventDefault();
-    const form = event.currentTarget;
-    const discordUserId = String(form.elements.discordUserId.value || "").trim();
-    const timezone = String(form.elements.timezone.value || "").trim();
-    try {
-      new Intl.DateTimeFormat("en-US", { timeZone: timezone });
-    } catch {
-      showToast("Informe um fuso válido, por exemplo America/Sao_Paulo.");
-      return;
-    }
-    if (discordUserId && !/^\d{17,20}$/.test(discordUserId)) {
-      showToast("O ID do Discord deve conter apenas 17 a 20 números.");
-      return;
-    }
+    const form = event.currentTarget, timezone = String(form.elements.timezone.value || "").trim();
+    try { new Intl.DateTimeFormat("en-US", { timeZone: timezone }); }
+    catch { showToast("Informe um fuso válido, por exemplo America/Sao_Paulo."); return; }
+    const enabled = form.elements.notificationsEnabled.checked;
     const { error } = await supabaseClient.from("ritmo").update({
-      discord_user_id: discordUserId || null,
-      timezone,
-      daily_summary_enabled: form.elements.summaryEnabled.checked,
-      daily_summary_time: form.elements.summaryTime.value || "21:00"
+      discord_notifications_enabled: enabled,
+      notify_habit_milestones: enabled && form.elements.notifyHabitMilestones.checked,
+      notify_goals: enabled && form.elements.notifyGoals.checked,
+      notify_tasks: enabled && form.elements.notifyTasks.checked,
+      daily_summary_enabled: enabled && form.elements.summaryEnabled.checked,
+      daily_summary_time: form.elements.summaryTime.value || "21:00", timezone
     }).eq("user_id", currentUser.id);
-    if (error) {
-      showToast(error.message);
-      return;
-    }
-    document.getElementById("settings-dialog").close();
-    await refreshData();
-    showToast("Configurações salvas.");
+    if (error) { showToast(error.message); return; }
+    document.getElementById("settings-dialog").close(); await refreshData(); showToast("Preferências de notificações salvas.");
+  });
+
+  document.getElementById("settings-close").addEventListener("click", () => document.getElementById("settings-dialog").close());
+  document.querySelectorAll("[data-settings-tab]").forEach((button) => button.addEventListener("click", () => {
+    const account = button.dataset.settingsTab === "account";
+    document.querySelectorAll("[data-settings-tab]").forEach((tab) => {
+      const selected = tab === button; tab.classList.toggle("active", selected); tab.setAttribute("aria-selected", String(selected));
+    });
+    const notifications = document.getElementById("settings-notifications"), accountPanel = document.getElementById("settings-account");
+    notifications.hidden = account; notifications.classList.toggle("active", !account);
+    accountPanel.hidden = !account; accountPanel.classList.toggle("active", account);
+    if (account) updateDiscordProfile();
+  }));
+  document.getElementById("settings-form").elements.notificationsEnabled.addEventListener("change", () => setNotificationControls(true));
+  document.getElementById("account-logout").addEventListener("click", async () => {
+    if (!await confirmInSite({ title:"Fazer logout?", message:"Você sairá do Ritmo neste dispositivo. Seus dados serão mantidos.", accept:"Fazer logout" })) return;
+    const { error } = await supabaseClient.auth.signOut();
+    if (error) showToast(error.message); else { document.getElementById("settings-dialog").close(); setSignedOut(); }
+  });
+  document.getElementById("account-delete").addEventListener("click", async () => {
+    if (!await confirmInSite({ title:"Excluir sua conta?", message:"Essa ação apaga permanentemente sua conta Ritmo e todas as tarefas, metas, hábitos e registros associados.", accept:"Excluir conta", danger:true })) return;
+    const { error } = await supabaseClient.rpc("delete_ritmo_account");
+    if (error) { showToast(error.message || "Não foi possível excluir a conta."); return; }
+    await supabaseClient.auth.signOut(); document.getElementById("settings-dialog").close(); setSignedOut(); showToast("Conta e dados excluídos.");
   });
 
   document.addEventListener("click", async (event) => {
@@ -576,7 +604,7 @@ function initializeEvents() {
 
     if (action === "delete-task") {
       const task = state.tasks.find((item) => item.id === id);
-      if (task && window.confirm('Excluir a tarefa "' + task.title + '" e seus registros?')) {
+      if (task && await confirmInSite({ title:"Excluir tarefa?", message:'Excluir a tarefa "' + task.title + '" e seus registros?', accept:"Excluir", danger:true })) {
         const ok = await runAction(() => supabaseClient.from("tasks").delete().eq("id", id).eq("user_id", owner));
         if (ok) showToast("Tarefa removida.");
       }
@@ -599,7 +627,7 @@ function initializeEvents() {
 
     if (action === "delete-goal") {
       const goal = state.goals.find((item) => item.id === id);
-      if (goal && window.confirm('Excluir a meta "' + goal.name + '" e seu progresso?')) {
+      if (goal && await confirmInSite({ title:"Excluir meta?", message:'Excluir a meta "' + goal.name + '" e seu progresso?', accept:"Excluir", danger:true })) {
         const ok = await runAction(() => supabaseClient.from("goals").delete().eq("id", id).eq("user_id", owner));
         if (ok) showToast("Meta removida.");
       }
@@ -607,9 +635,9 @@ function initializeEvents() {
 
     if (action === "increment-habit") {
       const habit=state.habits.find((item)=>item.id===id);
-      const raw=window.prompt("Quanto deseja registrar? Informe o valor em "+(habit&&habit.measure_unit||"unidades")+".","1");
+      const raw=await inputInSite("Registrar atividade","Quanto deseja registrar?","Informe a quantidade em "+(habit&&habit.measure_unit||"unidades")+".");
       if(raw===null)return;
-      const amount=Number(raw.replace(",","."));
+      const amount=Number(raw.replace(",",".").trim());
       if(!Number.isFinite(amount)||amount<=0){showToast("Informe um valor maior que zero.");return;}
       const ok=await runAction(()=>supabaseClient.from("habit_count_entries").insert({habit_id:id,user_id:owner,entry_date:today,amount}));
       if(ok)showToast("Registro de hábito adicionado.");
@@ -617,7 +645,7 @@ function initializeEvents() {
 
     if (action === "reset-habit") {
       const habit = state.habits.find((item) => item.id === id);
-      if (habit && window.confirm('Reiniciar a contagem de "' + habit.name + '" hoje? O histórico anterior será mantido.')) {
+      if (habit && await confirmInSite({title:"Reiniciar contagem?",message:'Reiniciar a contagem de "' + habit.name + '" hoje? O histórico anterior será mantido.',accept:"Reiniciar"})) {
         const result = await supabaseClient.rpc("reset_quit_habit", {
           p_habit_id: id, p_reset_at: new Date().toISOString(), p_note: null
         });
@@ -631,7 +659,7 @@ function initializeEvents() {
 
     if (action === "delete-habit") {
       const habit = state.habits.find((item) => item.id === id);
-      if (habit && window.confirm('Excluir o hábito "' + habit.name + '" e seu histórico?')) {
+      if (habit && await confirmInSite({ title:"Excluir hábito?", message:'Excluir o hábito "' + habit.name + '" e seu histórico?', accept:"Excluir", danger:true })) {
         const ok = await runAction(() => supabaseClient.from("habits").delete().eq("id", id).eq("user_id", owner));
         if (ok) showToast("Hábito removido.");
       }
@@ -731,7 +759,7 @@ function initializeEvents() {
   document.getElementById("habit-measure-unit").addEventListener("change", updateHabitMeasureFields);
   document.getElementById("habit-schedule-mode").addEventListener("change", updateHabitScheduleFields);
   document.querySelectorAll("[data-dialog-cancel]").forEach((button)=>button.addEventListener("click",()=>requestDialogClose(button.closest("dialog"))));
-  document.querySelectorAll("dialog.form-dialog").forEach((dialog)=>dialog.addEventListener("cancel",(event)=>{event.preventDefault();requestDialogClose(dialog);}));
+  document.querySelectorAll("#task-dialog,#goal-dialog,#habit-dialog").forEach((dialog)=>dialog.addEventListener("cancel",(event)=>{event.preventDefault();requestDialogClose(dialog);}));
   document.getElementById("calendar-grid").addEventListener("click",(event)=>{
     const day=event.target.closest("[data-calendar-date]");
     if(day){selectedCalendarDate=day.dataset.calendarDate;renderCalendar();}
@@ -745,8 +773,7 @@ async function initialize() {
   document.getElementById("auth-message").textContent = "";
   const secure = window.isSecureContext || ["localhost", "127.0.0.1"].includes(window.location.hostname);
   if (!secure) {
-    document.getElementById("auth-form").hidden = true;
-    document.getElementById("auth-mode-toggle").hidden = true;
+    document.getElementById("discord-login").hidden = true;
     document.getElementById("auth-message").textContent = "Para entrar com segurança, abra a versão HTTPS do site. O endereço HTTP do servidor Waifly não protege sua sessão.";
   }
 
@@ -802,5 +829,56 @@ function updateHabitMeasureFields(){
  const custom=document.getElementById("habit-measure-unit").value==="custom";
  setSectionDisabled("custom-unit-wrap",!custom);
 }
-function requestDialogClose(dialog){if(window.confirm("Quer mesmo cancelar? As informações preenchidas serão descartadas.")){dialog.querySelector("form").reset();dialog.close();}}
+async let confirmResolver = null;
+function setNotificationControls(changed) {
+  const form = document.getElementById("settings-form");
+  const enabled = form.elements.notificationsEnabled.checked;
+  const options = ["notifyHabitMilestones","notifyGoals","notifyTasks","summaryEnabled"];
+  if (changed && enabled && options.every((name) => !form.elements[name].checked)) {
+    options.forEach((name) => { form.elements[name].checked = true; });
+  }
+  options.forEach((name) => {
+    const input = form.elements[name];
+    if (!enabled) input.checked = false;
+    input.disabled = !enabled;
+  });
+  form.elements.summaryTime.disabled = !enabled;
+  document.getElementById("notification-options").classList.toggle("disabled", !enabled);
+}
+
+function confirmInSite(options = {}) {
+  const dialog = document.getElementById("confirm-dialog");
+  const form = document.getElementById("confirm-form");
+  document.getElementById("confirm-title").textContent = options.title || "Confirmar ação?";
+  document.getElementById("confirm-message").textContent = options.message || "";
+  const accept = document.getElementById("confirm-accept");
+  accept.textContent = options.accept || "Confirmar";
+  accept.classList.toggle("danger-button", !!options.danger);
+  accept.classList.toggle("primary-button", !options.danger);
+  const wrap = document.getElementById("confirm-input-wrap");
+  wrap.hidden = !options.inputLabel;
+  if (options.inputLabel) {
+    document.getElementById("confirm-input-label").textContent = options.inputLabel;
+    document.getElementById("confirm-input").value = "1";
+  }
+  return new Promise((resolve) => {
+    confirmResolver = resolve;
+    dialog.showModal();
+    if (options.inputLabel) document.getElementById("confirm-input").focus();
+    else accept.focus();
+  });
+}
+
+function settleConfirmation(value) {
+  if (confirmResolver) confirmResolver(value);
+  confirmResolver = null;
+  const dialog = document.getElementById("confirm-dialog");
+  if (dialog.open) dialog.close();
+}
+
+function inputInSite(title, message, inputLabel) {
+  return confirmInSite({ title, message, inputLabel, accept: "Registrar" });
+}
+
+function requestDialogClose(dialog){if(await confirmInSite({title:"Cancelar alterações?",message:"Quer mesmo fechar? As informações preenchidas serão descartadas.",accept:"Descartar",danger:true})){const form=dialog.querySelector("form");if(form)form.reset();dialog.close();}}
 document.addEventListener("DOMContentLoaded", initialize);
