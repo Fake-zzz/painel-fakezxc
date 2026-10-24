@@ -8,10 +8,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=d1c44928">
+  <link rel="stylesheet" href="styles.css?v=395bcb17">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0"></script>
   <script src="supabase-config.js"></script>
-  <script src="app.js?v=246ae06c" defer></script>
+  <script src="app.js?v=e536e169" defer></script>
 </head>
 <body>
   <main class="auth-screen" id="auth-screen">
@@ -35,6 +35,7 @@
         <button class="nav-item" data-view="tarefas"><span class="nav-icon">▤</span><span>Tarefas</span><span class="nav-count" id="task-nav-count">0</span></button>
         <button class="nav-item" data-view="metas"><span class="nav-icon">◎</span><span>Metas</span></button>
         <button class="nav-item" data-view="habitos"><span class="nav-icon">✳</span><span>Hábitos</span></button>
+        <button class="nav-item" data-view="lembretes"><span class="nav-icon"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></span><span>Lembretes</span></button>
         <button class="nav-item" data-view="calendario"><span class="nav-icon">▦</span><span>Calendário</span></button>
       </nav>
       <div class="sidebar-bottom">
@@ -107,14 +108,37 @@
           <section class="content-card full-card"><div class="card-heading"><div><div class="eyebrow">PLANEJAMENTO</div><h2 id="task-day-label"></h2></div></div><div id="all-task-list" class="task-list"></div></section>
         </section>
 
+        <section class="view-panel" id="view-lembretes">
+          <div class="welcome-row tasks-header">
+            <div><div class="eyebrow">AVISOS NO DISCORD</div><h1>Lembretes<span class="heading-period">.</span></h1><p class="page-subtitle">Um aviso na hora certa, direto no Discord.</p></div>
+            <div class="day-carousel-wrap">
+              <button class="today-jump" id="reminder-today-jump" type="button" hidden>Hoje</button>
+              <div class="day-carousel">
+                <button class="carousel-arrow" id="reminder-day-prev" type="button" aria-label="Dias anteriores">‹</button>
+                <div class="carousel-days" id="reminder-day-days"></div>
+                <button class="carousel-arrow" id="reminder-day-next" type="button" aria-label="Próximos dias">›</button>
+                <button class="carousel-calendar" id="reminder-day-calendar" type="button" aria-label="Abrir calendário" title="Abrir calendário">▦</button>
+              </div>
+            </div>
+            <button class="primary-button" data-open="reminder-dialog"><span>＋</span> Novo lembrete</button>
+          </div>
+          <section class="content-card full-card"><div class="card-heading"><div><div class="eyebrow">LEMBRETES</div><h2 id="reminder-day-label"></h2></div></div><div id="reminder-list" class="reminder-grid"></div></section>
+        </section>
+
         <section class="view-panel" id="view-calendario">
           <div class="welcome-row"><div><div class="eyebrow">SEU ESPAÇO · VISÃO COMPLETA</div><h1>Calendário<span class="heading-period">.</span></h1><p class="page-subtitle">Tarefas, metas e hábitos ao longo do tempo.</p></div></div>
           <div class="calendar-layout">
             <section class="content-card full-card calendar-card"><div class="calendar-toolbar"><button class="secondary-button" data-calendar-shift="-1" type="button" aria-label="Mês anterior">←</button><h2 id="calendar-month-label"></h2><button class="secondary-button" data-calendar-shift="1" type="button" aria-label="Próximo mês">→</button></div><div class="calendar-grid" id="calendar-grid"></div></section>
-            <aside class="content-card calendar-details" aria-label="Detalhes do dia">
-              <div class="card-heading"><div><div class="eyebrow">DETALHES DO DIA</div><h2 id="calendar-selected-label"></h2></div><button class="icon-button calendar-add" id="calendar-add" type="button" aria-label="Adicionar ao dia selecionado" aria-haspopup="menu" title="Adicionar ao dia">＋</button></div>
-              <div id="calendar-selected-details"></div>
-            </aside>
+            <div class="calendar-side">
+              <aside class="content-card calendar-details" aria-label="Detalhes do dia">
+                <div class="card-heading"><div><div class="eyebrow">DETALHES DO DIA</div><h2 id="calendar-selected-label"></h2></div><button class="icon-button calendar-add" id="calendar-add" type="button" aria-label="Adicionar ao dia selecionado" aria-haspopup="menu" title="Adicionar ao dia">＋</button></div>
+                <div id="calendar-selected-details"></div>
+              </aside>
+              <section class="content-card calendar-reminders" id="calendar-reminders" aria-label="Lembretes do dia" hidden>
+                <div class="card-heading"><div><div class="eyebrow">AVISOS NO DISCORD</div><h2>Lembretes</h2></div></div>
+                <div id="calendar-reminder-list"></div>
+              </section>
+            </div>
           </div>
         </section>
 
@@ -145,6 +169,19 @@
     </form>
   </dialog>
 
+  <dialog class="form-dialog" id="reminder-dialog">
+    <form method="dialog" id="reminder-form">
+      <div class="dialog-top"><div><div class="eyebrow">AVISO NO DISCORD</div><h2>Novo lembrete</h2></div><button class="close-button" type="button" data-dialog-cancel aria-label="Fechar">×</button></div>
+      <label>Qual é o lembrete?<input name="title" maxlength="90" placeholder="Ex.: tomar o remédio" required></label>
+      <div class="form-row"><label>Dia<input name="date" type="date" required></label><label>Horário<input name="time" type="time" required></label></div>
+      <label>Repetição<select id="reminder-repeat" name="repeat" class="select-control"><option value="once">Uma vez</option><option value="daily">Todos os dias</option><option value="weekly">Toda semana, no mesmo dia</option><option value="monthly">Todo mês, no mesmo dia</option></select></label>
+      <label id="reminder-month-day-wrap" hidden>Dia do mês<input name="monthDay" type="number" min="1" max="31" value="1"></label>
+      <label class="optional-label">Nota <span>(opcional)</span><textarea name="note" rows="2" maxlength="180" placeholder="Algum detalhe para lembrar?"></textarea></label>
+      <p class="form-hint reminder-always">Lembretes sempre são enviados no Discord.</p>
+      <div class="dialog-actions"><button class="secondary-button" type="button" data-dialog-cancel>Cancelar</button><button class="danger-button dialog-delete" type="button" data-dialog-delete hidden>Excluir</button><button class="primary-button" type="submit">Adicionar lembrete</button></div>
+    </form>
+  </dialog>
+
   <dialog class="form-dialog" id="goal-dialog">
     <form method="dialog" id="goal-form">
       <div class="dialog-top"><div><div class="eyebrow">PASSO A PASSO</div><h2>Nova meta</h2></div><button class="close-button" type="button" data-dialog-cancel aria-label="Fechar">×</button></div>
@@ -163,12 +200,24 @@
       <label>Categoria<select id="habit-category" name="category" class="select-control"><option value="quit">Parar um hábito</option><option value="count">Contagem de atividade</option></select></label>
       <div id="quit-habit-fields"><div class="form-row"><label>Data em que parou<input name="startDate" type="date" required></label><label>Horário<input name="startTime" type="time" value="09:00" required></label></div><label class="settings-checkbox"><input name="notifyMilestones" type="checkbox" checked> Receber notificações dos marcos</label><p class="form-hint">Os marcos seguem a data e hora informadas. Se escolher uma data antiga, o próximo aviso será no próximo marco futuro.</p></div>
       <div id="count-habit-fields" hidden>
-        <div class="form-row"><label>Tipo<select name="polarity" class="select-control"><option value="positive">Positivo · pelo menos</option><option value="negative">Negativo · menos de</option></select></label><label>Quantidade<input name="targetCount" type="number" min="0.01" step="0.01" value="2" required></label></div>
-        <div class="form-row"><label>Medida<select id="habit-measure-unit" name="measureUnit" class="select-control"><option value="vezes">Vezes</option><option value="minutos">Minutos</option><option value="horas">Horas</option><option value="custom">Outra medida</option></select></label><label id="custom-unit-wrap" hidden>Medida personalizada<input name="customUnit" maxlength="24" placeholder="Ex.: páginas"></label></div>
-        <div class="form-row"><label>Período<select id="habit-period-unit" name="periodUnit" class="select-control"><option value="day">Dia</option><option value="week">Semana</option><option value="month">Mês</option><option value="year">Ano</option></select></label><label>A cada<input name="periodInterval" type="number" min="1" max="366" value="1" required></label></div>
-        <div id="habit-schedule-wrap"><label>Frequência semanal<select id="habit-schedule-mode" name="scheduleMode" class="select-control"><option value="all_days">Todos os dias da semana</option><option value="specific_weekdays">Dias específicos</option><option value="days_per_week">Número de dias por semana</option></select></label>
+        <div class="count-sentence">
+          <label class="inline-field">Tipo<select id="habit-polarity" name="polarity" class="select-control"><option value="positive">Positivo</option><option value="negative">Negativo</option></select></label>
+          <span class="count-phrase" id="habit-polarity-phrase">Pelo menos</span>
+          <input name="targetCount" type="number" min="0.01" step="0.01" value="1" required aria-label="Quantidade">
+          <select id="habit-measure-unit" name="measureUnit" class="select-control" aria-label="Medida"><option value="vezes">Vezes</option><option value="minutos">Minutos</option><option value="horas">Horas</option><option value="custom">Outra medida</option></select>
+          <span class="count-phrase">por</span>
+          <select id="habit-period-unit" name="periodUnit" class="select-control" aria-label="Período"><option value="day">Dia</option><option value="week">Semana</option><option value="month">Mês</option><option value="year">Ano</option></select>
+          <label class="inline-field" id="habit-interval-wrap" hidden>a cada<input name="periodInterval" type="number" min="1" max="366" value="1" aria-label="A cada quantos períodos"></label>
+        </div>
+        <label id="custom-unit-wrap" hidden>Medida personalizada<input name="customUnit" maxlength="24" placeholder="Ex.: páginas"></label>
+        <hr class="form-divider">
+        <div id="habit-schedule-wrap" class="radio-group" role="radiogroup" aria-label="Frequência semanal">
+          <label class="radio-option"><input type="radio" name="scheduleMode" value="all_days" checked><span class="radio-mark"></span>Todos os dias</label>
+          <label class="radio-option"><input type="radio" name="scheduleMode" value="specific_weekdays"><span class="radio-mark"></span>Dias específicos da semana</label>
           <div id="habit-weekdays-wrap" class="weekday-options" hidden><label><input type="checkbox" name="repeatDays" value="1"> Seg</label><label><input type="checkbox" name="repeatDays" value="2"> Ter</label><label><input type="checkbox" name="repeatDays" value="3"> Qua</label><label><input type="checkbox" name="repeatDays" value="4"> Qui</label><label><input type="checkbox" name="repeatDays" value="5"> Sex</label><label><input type="checkbox" name="repeatDays" value="6"> Sáb</label><label><input type="checkbox" name="repeatDays" value="0"> Dom</label></div>
-          <label id="habit-days-per-week-wrap" hidden>Dias por semana<input name="daysPerWeek" type="number" min="1" max="7" value="3"></label></div>
+          <label class="radio-option"><input type="radio" name="scheduleMode" value="days_per_week"><span class="radio-mark"></span>Número de dias por semana</label>
+          <label id="habit-days-per-week-wrap" hidden>Dias por semana<input name="daysPerWeek" type="number" min="1" max="7" value="3"></label>
+        </div>
         <label>Começa em<input name="countStartDate" type="date" required></label><p class="form-hint">Use “Registrar” no cartão para somar a atividade. Os registros aparecem no resumo diário.</p>
       </div>
       <div class="dialog-actions"><button class="secondary-button" type="button" data-dialog-cancel>Cancelar</button><button class="danger-button dialog-delete" type="button" data-dialog-delete hidden>Excluir</button><button class="primary-button" type="submit">Criar hábito</button></div>
@@ -184,7 +233,7 @@
       <section class="settings-panel active" id="settings-notifications" role="tabpanel">
         <form id="settings-form">
           <label class="settings-checkbox settings-master"><input name="notificationsEnabled" type="checkbox"> Ativar notificações do Discord</label>
-          <p class="form-hint">Quando desligado, o Ritmo pausa todos os avisos e resumos enviados pelo bot.</p>
+          <p class="form-hint">Quando desligado, o Ritmo pausa todos os avisos e resumos enviados pelo bot, inclusive os lembretes.</p>
           <div class="notification-options" id="notification-options">
             <label class="settings-checkbox"><input name="notifyHabitMilestones" type="checkbox"> Marcos de hábitos</label>
             <label class="settings-checkbox"><input name="notifyGoals" type="checkbox"> Metas concluídas</label>

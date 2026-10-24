@@ -13,13 +13,11 @@ const STORAGE_KEY = "ritmo-prototype-v1";
 let currentUser = null;
 let activation = null;
 let activationUserId = null;
-let state = { tasks: [], goals: [], habits: [], checkins: [], progress: [], countEntries: [], resets: [], settings: null };
+let state = { tasks: [], reminders: [], goals: [], habits: [], checkins: [], progress: [], countEntries: [], resets: [], settings: null };
 let toastTimer;
 let today = "";
 let calendarCursor = null;
 let selectedCalendarDate = null;
-let taskSelectedDate = null;
-let taskWindowStart = null;
 let currentView = "hoje";
 const calendarGroupOpen = { tasks: true, goals: true, habits: true };
 
@@ -153,20 +151,28 @@ function taskOccurrence(task, date) {
   };
 }
 
-function occurrencesBetween(start, end) {
+function reminderOccurrence(reminder, date) {
+  return { id: reminder.id, title: reminder.title, note: reminder.description || "", date, time: occurrenceTime(reminder, date), done: false, task: reminder };
+}
+
+function reminderOccurrencesBetween(start, end) {
+  return occurrencesBetween(start, end, state.reminders, reminderOccurrence);
+}
+
+function occurrencesBetween(start, end, source = state.tasks, build = taskOccurrence) {
   const results = [];
   const startDate = dateFromKey(start);
   const endDate = dateFromKey(end);
   const span = Math.min(370, Math.ceil((endDate - startDate) / 86400000));
-  state.tasks.forEach((task) => {
+  source.forEach((task) => {
     if (task.repeat_frequency === "once") {
       const date = dateKeyInZone(new Date(task.scheduled_at));
-      if (date >= start && date <= end) results.push(taskOccurrence(task, date));
+      if (date >= start && date <= end) results.push(build(task, date));
       return;
     }
     for (let i = 0; i <= span; i += 1) {
       const date = offsetDateFrom(start, i);
-      if (taskOccursOn(task, date)) results.push(taskOccurrence(task, date));
+      if (taskOccursOn(task, date)) results.push(build(task, date));
     }
   });
   return results.sort((a, b) => (a.date + (a.time || "99:99")).localeCompare(b.date + (b.time || "99:99")));
@@ -178,8 +184,40 @@ function offsetDateFrom(key, days) {
   return date.toISOString().slice(0, 10);
 }
 
+const BELL_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+const BELL_OFF_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.7 3A6 6 0 0 1 18 8a21.3 21.3 0 0 0 .6 5"/><path d="M17 17H3s3-2 3-9a4.67 4.67 0 0 1 .3-1.7"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/><path d="m2 2 20 20"/></svg>';
+
+function notificationOff(type, item) {
+  if (!item) return false;
+  if (type === "task") return item.reminder_enabled === false;
+  if (type === "goal") return item.notify_enabled === false;
+  if (type === "habit") return item.category === "quit" && item.notify_milestones === false;
+  return false;
+}
+
+function mutedBell(type, item) {
+  return notificationOff(type, item)
+    ? '<span class="muted-bell" role="img" tabindex="0" aria-label="Notificação do Discord desligada" data-tip="Notificação do Discord desligada">' + BELL_OFF_SVG + "</span>"
+    : "";
+}
+
 function moreButton(type, id) {
   return '<button class="more-button" type="button" data-action="edit-item" data-item-type="' + type + '" data-id="' + id + '" aria-label="Configurações (' + ITEM_META[type].noun + ')" title="Configurações">⋯</button>';
+}
+
+function reminderRepeatLabel(reminder) {
+  return { once: "Único", daily: "Diário", weekly: "Semanal", monthly: "Mensal" }[reminder.repeat_frequency] || "";
+}
+
+function reminderMarkup(occurrence) {
+  return '<article class="reminder-card" data-item-type="reminder" data-id="' + occurrence.id + '">' +
+    '<div class="reminder-card-top"><span class="reminder-icon">' + BELL_SVG + '</span><time class="reminder-time">' + escapeHtml(occurrence.time || "--:--") + '</time><span class="card-spacer"></span>' + moreButton("reminder", occurrence.id) + "</div>" +
+    '<div class="reminder-title">' + escapeHtml(occurrence.title) + '</div><div class="reminder-meta">' + reminderRepeatLabel(occurrence.task) + "</div>" +
+    (occurrence.note ? '<p class="reminder-note">' + escapeHtml(occurrence.note) + "</p>" : "") + "</article>";
+}
+
+function reminderRow(occurrence) {
+  return '<div class="calendar-detail-row" data-item-type="reminder" data-id="' + occurrence.id + '"><span class="calendar-detail-icon">' + BELL_SVG.replace("<svg ", '<svg width="16" height="16" ') + "</span><div><strong>" + escapeHtml(occurrence.title) + "</strong><small>" + escapeHtml(occurrence.time || "--:--") + " · " + reminderRepeatLabel(occurrence.task) + "</small></div>" + moreButton("reminder", occurrence.id) + "</div>";
 }
 
 function taskMarkup(occurrence, options = {}) {
@@ -190,7 +228,7 @@ function taskMarkup(occurrence, options = {}) {
   const meta = showDate ? dateLabel + note : repeatLabel + note;
   return '<div class="task-row ' + (occurrence.done ? "completed" : "") + '" data-item-type="task" data-id="' + occurrence.id + '">' +
     '<button class="check-button ' + (occurrence.done ? "done" : "") + '" data-action="toggle-task" data-id="' + occurrence.id + '" data-date="' + occurrence.date + '" aria-label="' + (occurrence.done ? "Marcar como pendente" : "Concluir tarefa") + '">' + (occurrence.done ? "✓" : "") + "</button>" +
-    '<div class="task-info"><div class="task-title">' + escapeHtml(occurrence.title) + '</div><div class="task-meta">' + meta + "</div></div>" +
+    '<div class="task-info"><div class="task-title-line"><div class="task-title">' + escapeHtml(occurrence.title) + "</div>" + mutedBell("task", occurrence.task) + '</div><div class="task-meta">' + meta + "</div></div>" +
     (occurrence.time ? '<time class="task-time">' + escapeHtml(occurrence.time) + "</time>" : "") +
     moreButton("task", occurrence.id) + "</div>";
 }
@@ -202,8 +240,8 @@ function goalMarkup(goal, featured = false) {
   const remaining = Math.max(0, target - progress);
   const areaClass = featured ? "goal-feature" : "goal-card";
   return '<article class="' + areaClass + '" data-item-type="goal" data-id="' + goal.id + '">' +
-    (featured ? "" : '<div class="goal-card-top"><div class="goal-card-icon">◎</div><div><div class="goal-card-title">' + escapeHtml(goal.name) + '</div><div class="goal-card-sub">Meta diária · ' + target + " " + escapeHtml(goal.unit) + '</div><div class="goal-card-sub">Válida de ' + escapeHtml(formatDate(goal.starts_on)) + (goal.ends_on ? ' até ' + escapeHtml(formatDate(goal.ends_on)) : ' · sem data final') + '</div></div><span class="card-spacer"></span>' + moreButton("goal", goal.id) + '</div>') +
-    (featured ? '<div class="goal-feature-title">' + escapeHtml(goal.name) + '</div><div class="goal-feature-sub">Sua meta é ' + target + " " + escapeHtml(goal.unit) + " por dia.</div>" : "") +
+    (featured ? "" : '<div class="goal-card-top"><div class="goal-card-icon">◎</div><div><div class="goal-card-title">' + escapeHtml(goal.name) + mutedBell("goal", goal) + '</div><div class="goal-card-sub">Meta diária · ' + target + " " + escapeHtml(goal.unit) + '</div><div class="goal-card-sub">Válida de ' + escapeHtml(formatDate(goal.starts_on)) + (goal.ends_on ? ' até ' + escapeHtml(formatDate(goal.ends_on)) : ' · sem data final') + '</div></div><span class="card-spacer"></span>' + moreButton("goal", goal.id) + '</div>') +
+    (featured ? '<div class="goal-feature-title">' + escapeHtml(goal.name) + mutedBell("goal", goal) + '</div><div class="goal-feature-sub">Sua meta é ' + target + " " + escapeHtml(goal.unit) + " por dia.</div>" : "") +
     '<div class="goal-number-row"><span class="goal-number">' + progress + '</span><span class="goal-target">/ ' + target + " " + escapeHtml(goal.unit) + "</span></div>" +
     '<div class="goal-progress"><span style="width:' + percent + '%"></span></div>' +
     '<div class="' + (featured ? "goal-actions" : "goal-card-footer") + '"><span class="small-muted">' + (remaining > 0 ? "Faltam " + remaining + " " + escapeHtml(goal.unit) : "Meta concluída hoje ✦") + '</span><span class="goal-action-buttons"><button class="step-button" data-action="decrement-goal" data-id="' + goal.id + '" aria-label="Diminuir progresso">−</button><button class="step-button" data-action="increment-goal" data-id="' + goal.id + '" aria-label="Adicionar progresso">+</button></span></div>' +
@@ -256,7 +294,7 @@ function habitMarkup(habit) {
     const range=habitPeriodRange(habit,today),unit=habit.measure_unit||"vezes";
     const cadence="A cada "+(habit.period_interval>1?habit.period_interval+" ":"")+({day:"dia(s)",week:"semana(s)",month:"mês(es)",year:"ano(s)"}[habit.period_unit||"day"]);
     const schedule=habit.schedule_mode==="specific_weekdays"?"Dias: "+(habit.repeat_days||[]).map(Number).map((day)=>["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"][day]).join(", "):habit.schedule_mode==="days_per_week"?"Em "+habit.days_per_week+" dia(s) por semana":"Registros no período";
-    return '<article class="habit-card" data-item-type="habit" data-id="'+habit.id+'"><div class="habit-card-top"><div class="habit-card-icon">↻</div><div><div class="habit-card-title">'+escapeHtml(habit.name)+'</div><div class="habit-card-sub">Contagem · '+(negative?"negativa":"positiva")+'</div></div><span class="card-spacer"></span>'+moreButton("habit",habit.id)+'</div>'+
+    return '<article class="habit-card" data-item-type="habit" data-id="'+habit.id+'"><div class="habit-card-top"><div class="habit-card-icon">↻</div><div><div class="habit-card-title">'+escapeHtml(habit.name)+mutedBell("habit",habit)+'</div><div class="habit-card-sub">Contagem · '+(negative?"negativa":"positiva")+'</div></div><span class="card-spacer"></span>'+moreButton("habit",habit.id)+'</div>'+
     '<div class="count-habit-rule">'+(negative?"Menos de ":"Pelo menos ")+target+" "+escapeHtml(unit)+" · "+cadence+'</div><div class="habit-days-row"><div class="habit-days">'+amount+'<span>'+escapeHtml(unit)+'</span></div><span class="milestone-tag">'+(achieved?"Alvo do período atingido ✦":escapeHtml(formatDate(range.start,{day:"numeric",month:"short"}))+" — "+escapeHtml(formatDate(range.end,{day:"numeric",month:"short"})))+'</span></div>'+
     '<div class="milestone-track"><span style="width:'+percent+'%"></span></div><div class="habit-card-footer"><span>'+escapeHtml(schedule)+'</span><button class="reset-button" data-action="increment-habit" data-id="'+habit.id+'">＋ Registrar</button></div></article>';
   }
@@ -268,34 +306,53 @@ function habitMarkup(habit) {
   const previousMs=previous?previous.date.getTime():startMs,progress=Math.min(100,Math.max(0,(nowMs-previousMs)/(next.date.getTime()-previousMs)*100));
   const isMilestoneToday=previous&&dateKeyInZone(previous.date)===today;
   const subtitle=habit.quit_started_at?"Parou em "+new Intl.DateTimeFormat("pt-BR",{dateStyle:"medium",timeStyle:"short",timeZone:activeTimezone()}).format(new Date(habit.quit_started_at)):"Começou em "+formatDate(start);
-  return '<article class="habit-card" data-item-type="habit" data-id="'+habit.id+'"><div class="habit-card-top"><div class="habit-card-icon">✳</div><div><div class="habit-card-title">'+escapeHtml(habit.name)+'</div><div class="habit-card-sub">'+escapeHtml(subtitle)+'</div></div><span class="card-spacer"></span>'+moreButton("habit",habit.id)+'</div>'+
+  return '<article class="habit-card" data-item-type="habit" data-id="'+habit.id+'"><div class="habit-card-top"><div class="habit-card-icon">✳</div><div><div class="habit-card-title">'+escapeHtml(habit.name)+mutedBell("habit",habit)+'</div><div class="habit-card-sub">'+escapeHtml(subtitle)+'</div></div><span class="card-spacer"></span>'+moreButton("habit",habit.id)+'</div>'+
   '<div class="habit-days-row"><div class="habit-days">'+elapsed+"<span>"+(elapsed===1?"dia":"dias")+'</span></div><span class="milestone-tag">'+(isMilestoneToday?"Marco de "+previous.label+" ✦":"Próximo marco: "+next.label)+'</span></div><div class="milestone-track"><span style="width:'+progress+'%"></span></div><div class="habit-card-footer"><span>O histórico continua guardado ao recomeçar.</span><button class="reset-button" data-action="reset-habit" data-id="'+habit.id+'">↻ Reiniciar</button></div></article>';
 }
 
 function capitalize(text) { return text ? text.charAt(0).toUpperCase() + text.slice(1) : text; }
 function weekdayLabel(date) { return capitalize(formatDate(date, { weekday: "short" }).replace(".", "")); }
 
-function focusTaskDay(date) {
-  taskSelectedDate = date;
-  const visible = taskWindowStart && [0, 1, 2].some((index) => offsetDateFrom(taskWindowStart, index) === date);
-  if (!visible) taskWindowStart = offsetDateFrom(date, -1);
+const dayPickers = { task: { selected: null, start: null }, reminder: { selected: null, start: null } };
+
+function focusPickerDay(kind, date) {
+  const picker = dayPickers[kind];
+  picker.selected = date;
+  const visible = picker.start && [0, 1, 2].some((index) => offsetDateFrom(picker.start, index) === date);
+  if (!visible) picker.start = offsetDateFrom(date, -1);
+}
+
+function focusTaskDay(date) { focusPickerDay("task", date); }
+
+function renderDayPicker(kind) {
+  const picker = dayPickers[kind];
+  if (!picker.selected) picker.selected = today;
+  if (!picker.start) picker.start = offsetDateFrom(picker.selected, -1);
+  const days = [0, 1, 2].map((index) => offsetDateFrom(picker.start, index));
+  const busy = kind === "task" ? occurrencesBetween(days[0], days[2]) : reminderOccurrencesBetween(days[0], days[2]);
+  document.getElementById(kind + "-day-days").innerHTML = days.map((date) =>
+    '<button type="button" class="carousel-day' + (date === picker.selected ? " is-selected" : "") + (date === today ? " is-today" : "") + '" data-day="' + date + '" aria-pressed="' + (date === picker.selected) + '" aria-label="' + escapeHtml(formatDate(date, { weekday: "long", day: "numeric", month: "long" })) + '">' +
+    "<small>" + weekdayLabel(date) + "</small><strong>" + Number(date.slice(8, 10)) + '</strong><i class="day-dot' + (busy.some((item) => item.date === date) ? " has" : "") + '"></i></button>').join("");
+  document.getElementById(kind + "-today-jump").hidden = days.includes(today);
+  const label = capitalize(formatDate(picker.selected, { weekday: "long", day: "numeric", month: "long" }));
+  document.getElementById(kind + "-day-label").textContent = (picker.selected === today ? "Hoje · " : "") + label;
+  return picker.selected;
 }
 
 function renderTaskDay() {
-  if (!taskSelectedDate) taskSelectedDate = today;
-  if (!taskWindowStart) taskWindowStart = offsetDateFrom(taskSelectedDate, -1);
-  const days = [0, 1, 2].map((index) => offsetDateFrom(taskWindowStart, index));
-  const busy = occurrencesBetween(days[0], days[2]);
-  document.getElementById("task-day-days").innerHTML = days.map((date) =>
-    '<button type="button" class="carousel-day' + (date === taskSelectedDate ? " is-selected" : "") + (date === today ? " is-today" : "") + '" data-task-day="' + date + '" aria-pressed="' + (date === taskSelectedDate) + '" aria-label="' + escapeHtml(formatDate(date, { weekday: "long", day: "numeric", month: "long" })) + '">' +
-    "<small>" + weekdayLabel(date) + "</small><strong>" + Number(date.slice(8, 10)) + '</strong><i class="day-dot' + (busy.some((item) => item.date === date) ? " has" : "") + '"></i></button>').join("");
-  document.getElementById("task-today-jump").hidden = days.includes(today);
-  const label = capitalize(formatDate(taskSelectedDate, { weekday: "long", day: "numeric", month: "long" }));
-  document.getElementById("task-day-label").textContent = (taskSelectedDate === today ? "Hoje · " : "") + label;
-  const tasks = occurrencesBetween(taskSelectedDate, taskSelectedDate);
+  const date = renderDayPicker("task");
+  const tasks = occurrencesBetween(date, date);
   document.getElementById("all-task-list").innerHTML = tasks.length
     ? tasks.map((task) => taskMarkup(task, { showDate: false })).join("")
     : emptyState("Nada marcado para este dia", "As tarefas deste dia vão aparecer aqui.");
+}
+
+function renderReminderDay() {
+  const date = renderDayPicker("reminder");
+  const items = reminderOccurrencesBetween(date, date);
+  document.getElementById("reminder-list").innerHTML = items.length
+    ? items.map(reminderMarkup).join("")
+    : emptyState("Nenhum lembrete neste dia", "Os lembretes do dia aparecem aqui como cartões.");
 }
 
 function upcomingPreviewMarkup() {
@@ -306,7 +363,7 @@ function upcomingPreviewMarkup() {
   }
   if (!events.length) return emptyState("Você não tem atividades chegando.", "");
   const names = { once: "", daily: "Tarefa diária · ", weekly: "Tarefa semanal · ", monthly: "Tarefa mensal · " };
-  return events.map((event) => '<div class="preview-row' + (event.done ? " is-upcoming-done" : "") + '" data-item-type="task" data-id="' + event.id + '"><span class="preview-date">' + escapeHtml(event.date === today ? "Hoje" : formatDate(event.date)) + "</span><div><strong>" + escapeHtml(event.title) + "</strong><small>" + escapeHtml(names[event.task.repeat_frequency] || "") + escapeHtml(event.time || "Sem horário") + "</small></div></div>").join("");
+  return events.map((event) => '<div class="preview-row' + (event.done ? " is-upcoming-done" : "") + '" data-item-type="task" data-id="' + event.id + '"><span class="preview-date">' + escapeHtml(event.date === today ? "Hoje" : formatDate(event.date)) + "</span><div><strong>" + escapeHtml(event.title) + mutedBell("task", event.task) + "</strong><small>" + escapeHtml(names[event.task.repeat_frequency] || "") + escapeHtml(event.time || "Sem horário") + "</small></div></div>").join("");
 }
 
 function goalActiveOn(goal, date) {
@@ -329,12 +386,12 @@ function detailGroup(key, title, count, rows, emptyText) {
 }
 
 function goalDetailRow(goal) {
-  return '<div class="calendar-detail-row" data-item-type="goal" data-id="' + goal.id + '"><span class="calendar-detail-icon">◎</span><div><strong>' + escapeHtml(goal.name) + "</strong><small>Meta diária · " + Number(goal.target_value) + " " + escapeHtml(goal.unit) + "</small></div>" + moreButton("goal", goal.id) + "</div>";
+  return '<div class="calendar-detail-row" data-item-type="goal" data-id="' + goal.id + '"><span class="calendar-detail-icon">◎</span><div><strong>' + escapeHtml(goal.name) + mutedBell("goal", goal) + "</strong><small>Meta diária · " + Number(goal.target_value) + " " + escapeHtml(goal.unit) + "</small></div>" + moreButton("goal", goal.id) + "</div>";
 }
 
 function habitDetailRow(habit) {
   const info = habit.category === "count" ? "Contagem · " + Number(habit.target_count) + " " + escapeHtml(habit.measure_unit || "vezes") : "Parar um hábito";
-  return '<div class="calendar-detail-row" data-item-type="habit" data-id="' + habit.id + '"><span class="calendar-detail-icon">' + (habit.category === "count" ? "↻" : "✳") + "</span><div><strong>" + escapeHtml(habit.name) + "</strong><small>" + info + "</small></div>" + moreButton("habit", habit.id) + "</div>";
+  return '<div class="calendar-detail-row" data-item-type="habit" data-id="' + habit.id + '"><span class="calendar-detail-icon">' + (habit.category === "count" ? "↻" : "✳") + "</span><div><strong>" + escapeHtml(habit.name) + mutedBell("habit", habit) + "</strong><small>" + info + "</small></div>" + moreButton("habit", habit.id) + "</div>";
 }
 
 function renderCalendar() {
@@ -373,6 +430,9 @@ function renderCalendar() {
     detailGroup("tasks", "Tarefas", dayTasks.length, dayTasks.map((task) => taskMarkup(task, { showDate: false })).join(""), "Nenhuma tarefa neste dia.") +
     detailGroup("goals", "Metas", dayGoals.length, dayGoals.map(goalDetailRow).join(""), "Nenhuma meta neste dia.") +
     detailGroup("habits", "Hábitos", dayHabits.length, dayHabits.map(habitDetailRow).join("") + dayResets, "Nenhum hábito neste dia.");
+  const dayReminders = reminderOccurrencesBetween(date, date);
+  document.getElementById("calendar-reminders").hidden = !dayReminders.length;
+  document.getElementById("calendar-reminder-list").innerHTML = dayReminders.map(reminderRow).join("");
 }
 
 function render() {
@@ -405,6 +465,7 @@ function render() {
     ? tasksToday.map(taskMarkup).join("")
     : emptyState("Dia livre por enquanto", "Adicione uma tarefa quando quiser planejar algo.");
   renderTaskDay();
+  renderReminderDay();
   document.getElementById("upcoming-preview").innerHTML = upcomingPreviewMarkup();
   renderCalendar();
   document.getElementById("goal-list").innerHTML = state.goals.length
@@ -435,7 +496,8 @@ async function loadData() {
     supabaseClient.from("habits").select("*").eq("user_id", owner).eq("is_active", true).order("created_at", { ascending: false }),
     supabaseClient.from("task_checkins").select("*").eq("user_id", owner).order("occurrence_date", { ascending: false }),
     supabaseClient.from("habit_resets").select("*").eq("user_id", owner).order("reset_on", { ascending: false }),
-    supabaseClient.from("habit_count_entries").select("*").eq("user_id", owner).order("entry_date", { ascending: false })
+    supabaseClient.from("habit_count_entries").select("*").eq("user_id", owner).order("entry_date", { ascending: false }),
+    supabaseClient.from("reminders").select("*").eq("user_id", owner).eq("is_active", true).order("created_at", { ascending: false })
   ]);
   const failed = results.find((result) => result.error);
   if (failed) throw failed.error;
@@ -447,6 +509,7 @@ async function loadData() {
   state.checkins = results[5].data || [];
   state.resets = results[6].data || [];
   state.countEntries = results[7].data || [];
+  state.reminders = results[8].data || [];
   render();
 }
 
@@ -462,10 +525,11 @@ async function refreshData() {
 const ITEM_META = {
   task: { table: "tasks", dialog: "task-dialog", noun: "tarefa", create: ["Nova tarefa", "Adicionar tarefa"], edit: "Configurações da tarefa" },
   goal: { table: "goals", dialog: "goal-dialog", noun: "meta", create: ["Nova meta", "Criar meta"], edit: "Configurações da meta" },
-  habit: { table: "habits", dialog: "habit-dialog", noun: "hábito", create: ["Novo hábito", "Criar hábito"], edit: "Configurações do hábito" }
+  habit: { table: "habits", dialog: "habit-dialog", noun: "hábito", create: ["Novo hábito", "Criar hábito"], edit: "Configurações do hábito" },
+  reminder: { table: "reminders", dialog: "reminder-dialog", noun: "lembrete", create: ["Novo lembrete", "Adicionar lembrete"], edit: "Configurações do lembrete" }
 };
 
-function itemsOf(type) { return type === "task" ? state.tasks : type === "goal" ? state.goals : state.habits; }
+function itemsOf(type) { return type === "task" ? state.tasks : type === "reminder" ? state.reminders : type === "goal" ? state.goals : state.habits; }
 function findItem(type, id) { return itemsOf(type).find((item) => item.id === id); }
 
 function setDialogMode(dialog, type, item) {
@@ -486,8 +550,8 @@ function prepareDialog(id) {
   if (form.elements.countStartDate) form.elements.countStartDate.value = today;
   if (form.elements.startTime) form.elements.startTime.value = timeKeyInZone(new Date());
   if (form.elements.repeat) form.elements.repeat.value = "once";
-  if (id === "task-dialog") updateTaskRepeatFields();
-  if (id === "habit-dialog") updateHabitCategoryFields();
+  if (id === "task-dialog" || id === "reminder-dialog") updateRepeatFields(id.replace("-dialog", ""));
+  if (id === "habit-dialog") { updateHabitCategoryFields(); document.getElementById("habit-interval-wrap").hidden = true; }
   setDialogMode(dialog, id.replace("-dialog", ""), null);
   return dialog;
 }
@@ -499,7 +563,7 @@ function openDialog(id, presetDate) {
     if (form.elements.date) form.elements.date.value = presetDate;
     if (form.elements.startDate) form.elements.startDate.value = presetDate;
     if (form.elements.countStartDate) form.elements.countStartDate.value = presetDate;
-    if (id === "task-dialog") updateTaskRepeatFields();
+    if (id === "task-dialog" || id === "reminder-dialog") updateRepeatFields(id.replace("-dialog", ""));
   }
   dialog.showModal();
   const firstInput = form.querySelector("input");
@@ -510,7 +574,7 @@ function openEditDialog(type, id) {
   const item = findItem(type, id);
   if (!item) return;
   const dialog = prepareDialog(ITEM_META[type].dialog), form = dialog.querySelector("form"), f = form.elements;
-  if (type === "task") {
+  if (type === "task" || type === "reminder") {
     f.title.value = item.title;
     if (item.repeat_frequency === "once") {
       const moment = new Date(item.scheduled_at);
@@ -519,10 +583,10 @@ function openEditDialog(type, id) {
       f.date.value = item.starts_on; f.time.value = String(item.reminder_time || "").slice(0, 5);
     }
     f.repeat.value = item.repeat_frequency;
-    updateTaskRepeatFields();
+    updateRepeatFields(type);
     if (item.repeat_frequency === "monthly") f.monthDay.value = item.repeat_month_day;
     f.note.value = item.description || "";
-    f.notify.checked = item.reminder_enabled !== false;
+    if (type === "task") f.notify.checked = item.reminder_enabled !== false;
   } else if (type === "goal") {
     f.title.value = item.name; f.target.value = Number(item.target_value); f.unit.value = item.unit;
     f.startDate.value = item.starts_on; f.endDate.value = item.ends_on || "";
@@ -538,7 +602,8 @@ function openEditDialog(type, id) {
       if (["vezes", "minutos", "horas"].includes(item.measure_unit)) f.measureUnit.value = item.measure_unit;
       else { f.measureUnit.value = "custom"; f.customUnit.value = item.measure_unit; }
       f.periodUnit.value = item.period_unit; f.periodInterval.value = item.period_interval;
-      f.scheduleMode.value = item.schedule_mode;
+      form.querySelectorAll('[name="scheduleMode"]').forEach((radio) => { radio.checked = radio.value === item.schedule_mode; });
+      document.getElementById("habit-interval-wrap").hidden = Number(item.period_interval || 1) === 1;
       form.querySelectorAll('[name="repeatDays"]').forEach((box) => { box.checked = (item.repeat_days || []).map(Number).includes(Number(box.value)); });
       if (item.days_per_week) f.daysPerWeek.value = item.days_per_week;
       f.countStartDate.value = item.started_on;
@@ -555,9 +620,10 @@ function taskRecordFromForm(form) {
   if (!date || !time) { showToast("Escolha o dia e o horário da tarefa."); return null; }
   const record = {
     title: String(data.get("title")).trim(), description: String(data.get("note") || "").trim() || null,
-    repeat_frequency: repeat, reminder_enabled: form.elements.notify.checked,
+    repeat_frequency: repeat,
     scheduled_at: null, starts_on: null, reminder_time: null, repeat_days: [], repeat_month_day: null
   };
+  if (form.elements.notify) record.reminder_enabled = form.elements.notify.checked;
   if (repeat === "once") record.scheduled_at = zonedDateTimeToIso(date, time);
   else {
     record.starts_on = date; record.reminder_time = time;
@@ -619,11 +685,12 @@ async function toggleItemNotification(type, id) {
 async function deleteItem(type, id) {
   const item = findItem(type, id);
   if (!item) return false;
-  const name = type === "task" ? item.title : item.name;
+  const name = type === "task" || type === "reminder" ? item.title : item.name;
   const text = {
     task: ["Excluir tarefa?", 'Excluir a tarefa "' + name + '" e seus registros?', "Tarefa removida."],
     goal: ["Excluir meta?", 'Excluir a meta "' + name + '" e seu progresso?', "Meta removida."],
-    habit: ["Excluir hábito?", 'Excluir o hábito "' + name + '" e seu histórico?', "Hábito removido."]
+    habit: ["Excluir hábito?", 'Excluir o hábito "' + name + '" e seu histórico?', "Hábito removido."],
+    reminder: ["Excluir lembrete?", 'Excluir o lembrete "' + name + '"?', "Lembrete removido."]
   }[type];
   if (!await confirmInSite({ title: text[0], message: text[1], accept: "Excluir", danger: true })) return false;
   const ok = await runAction(() => supabaseClient.from(ITEM_META[type].table).delete().eq("id", id).eq("user_id", currentUser.id));
@@ -654,7 +721,7 @@ function showSiteMenu(x, y, items, label) {
 function itemMenuItems(type, id) {
   const item = findItem(type, id);
   const items = [{ label: "Configurações", run: () => openEditDialog(type, id) }];
-  if (item && (type !== "habit" || item.category === "quit")) {
+  if (item && type !== "reminder" && (type !== "habit" || item.category === "quit")) {
     items.push({ label: notificationState(type, item) ? "Desativar Notificação" : "Ativar Notificação", run: () => toggleItemNotification(type, id) });
   }
   items.push({ label: "Excluir", danger: true, run: () => deleteItem(type, id) });
@@ -666,7 +733,8 @@ function openAddMenu(date, anchor) {
   showSiteMenu(box.left, box.bottom + 6, [
     { label: "Criar tarefa", run: () => openDialog("task-dialog", date) },
     { label: "Criar meta", run: () => openDialog("goal-dialog", date) },
-    { label: "Criar hábito", run: () => openDialog("habit-dialog", date) }
+    { label: "Criar hábito", run: () => openDialog("habit-dialog", date) },
+    { label: "Criar lembrete", run: () => openDialog("reminder-dialog", date) }
   ], "Adicionar ao dia");
 }
 
@@ -674,7 +742,7 @@ function switchView(name) {
   document.querySelectorAll(".view-panel").forEach((panel) => panel.classList.toggle("active", panel.id === "view-" + name));
   document.querySelectorAll(".nav-item").forEach((button) => button.classList.toggle("active", button.dataset.view === name));
   currentView = name;
-  const labels = { hoje: "Visão geral", tarefas: "Tarefas", metas: "Metas", habitos: "Hábitos", calendario: "Calendário" };
+  const labels = { hoje: "Visão geral", tarefas: "Tarefas", metas: "Metas", habitos: "Hábitos", lembretes: "Lembretes", calendario: "Calendário" };
   document.getElementById("breadcrumb-current").textContent = labels[name] || labels.hoje;
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -713,7 +781,7 @@ function updateDiscordProfile() {
 
 function setSignedOut() {
   currentUser = null;
-  state = { tasks: [], goals: [], habits: [], checkins: [], progress: [], countEntries: [], resets: [], settings: null };
+  state = { tasks: [], reminders: [], goals: [], habits: [], checkins: [], progress: [], countEntries: [], resets: [], settings: null };
   document.getElementById("app-shell").hidden = true;
   document.getElementById("auth-screen").hidden = false;
 }
@@ -984,22 +1052,42 @@ function initializeEvents() {
     }
   });
 
+  document.getElementById("reminder-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget, dialog = form.closest("dialog"), editId = dialog.dataset.editId;
+    const record = taskRecordFromForm(form);
+    if (!record) return;
+    const ok = await runAction(() => editId
+      ? supabaseClient.from("reminders").update(record).eq("id", editId).eq("user_id", currentUser.id)
+      : supabaseClient.from("reminders").insert({ ...record, user_id: currentUser.id }));
+    if (ok) {
+      dialog.close();
+      focusPickerDay("reminder", record.repeat_frequency === "once" ? dateKeyInZone(new Date(record.scheduled_at)) : record.starts_on);
+      renderReminderDay();
+      if (!editId && currentView !== "calendario") switchView("lembretes");
+      showToast(editId ? "Lembrete atualizado." : "Lembrete criado.");
+    }
+  });
+
   document.querySelectorAll("[data-dialog-delete]").forEach((button) => button.addEventListener("click", async () => {
     const dialog = button.closest("dialog"), type = dialog.id.replace("-dialog", "");
     if (dialog.dataset.editId && await deleteItem(type, dialog.dataset.editId)) dialog.close();
   }));
 
-  document.getElementById("task-day-prev").addEventListener("click", () => { taskWindowStart = offsetDateFrom(taskWindowStart || today, -1); renderTaskDay(); });
-  document.getElementById("task-day-next").addEventListener("click", () => { taskWindowStart = offsetDateFrom(taskWindowStart || today, 1); renderTaskDay(); });
-  document.getElementById("task-day-days").addEventListener("click", (event) => {
-    const day = event.target.closest("[data-task-day]");
-    if (day) { taskSelectedDate = day.dataset.taskDay; renderTaskDay(); }
-  });
-  document.getElementById("task-today-jump").addEventListener("click", () => { taskSelectedDate = today; taskWindowStart = offsetDateFrom(today, -1); renderTaskDay(); });
-  document.getElementById("task-day-calendar").addEventListener("click", () => {
-    selectedCalendarDate = taskSelectedDate || today;
-    calendarCursor = selectedCalendarDate.slice(0, 7) + "-01";
-    renderCalendar(); switchView("calendario");
+  ["task", "reminder"].forEach((kind) => {
+    const picker = dayPickers[kind], redraw = () => (kind === "task" ? renderTaskDay() : renderReminderDay());
+    document.getElementById(kind + "-day-prev").addEventListener("click", () => { picker.start = offsetDateFrom(picker.start || today, -1); redraw(); });
+    document.getElementById(kind + "-day-next").addEventListener("click", () => { picker.start = offsetDateFrom(picker.start || today, 1); redraw(); });
+    document.getElementById(kind + "-day-days").addEventListener("click", (event) => {
+      const day = event.target.closest("[data-day]");
+      if (day) { picker.selected = day.dataset.day; redraw(); }
+    });
+    document.getElementById(kind + "-today-jump").addEventListener("click", () => { picker.selected = today; picker.start = offsetDateFrom(today, -1); redraw(); });
+    document.getElementById(kind + "-day-calendar").addEventListener("click", () => {
+      selectedCalendarDate = picker.selected || today;
+      calendarCursor = selectedCalendarDate.slice(0, 7) + "-01";
+      renderCalendar(); switchView("calendario");
+    });
   });
 
   const siteMenu = document.getElementById("site-menu");
@@ -1024,10 +1112,13 @@ function initializeEvents() {
   document.getElementById("quick-add").addEventListener("click", () => openDialog("task-dialog"));
   document.getElementById("task-repeat").addEventListener("change", updateTaskRepeatFields);
   document.querySelector('#task-form [name="date"]').addEventListener("change", updateTaskRepeatFields);
+  document.getElementById("reminder-repeat").addEventListener("change", () => updateRepeatFields("reminder"));
+  document.querySelector('#reminder-form [name="date"]').addEventListener("change", () => updateRepeatFields("reminder"));
   document.getElementById("habit-category").addEventListener("change", updateHabitCategoryFields);
   document.getElementById("habit-period-unit").addEventListener("change", updateHabitPeriodFields);
   document.getElementById("habit-measure-unit").addEventListener("change", updateHabitMeasureFields);
-  document.getElementById("habit-schedule-mode").addEventListener("change", updateHabitScheduleFields);
+  document.getElementById("habit-schedule-wrap").addEventListener("change", updateHabitScheduleFields);
+  document.getElementById("habit-polarity").addEventListener("change", updatePolarityPhrase);
   document.querySelectorAll("[data-dialog-cancel]").forEach((button)=>button.addEventListener("click",()=>requestDialogClose(button.closest("dialog"))));
   document.querySelectorAll("#task-dialog,#goal-dialog,#habit-dialog").forEach((dialog)=>dialog.addEventListener("cancel",(event)=>{event.preventDefault();requestDialogClose(dialog);}));
   const calendarGrid = document.getElementById("calendar-grid");
@@ -1091,22 +1182,27 @@ function setSectionDisabled(id,disabled){
  const section=document.getElementById(id);section.hidden=disabled;
  section.querySelectorAll("input,select,textarea").forEach((field)=>{field.disabled=disabled;});
 }
-function updateTaskRepeatFields(){
- const repeat=document.getElementById("task-repeat").value,wrap=document.getElementById("task-month-day-wrap"),input=wrap.querySelector("input");
+function updateRepeatFields(prefix){
+ const repeat=document.getElementById(prefix+"-repeat").value,wrap=document.getElementById(prefix+"-month-day-wrap"),input=wrap.querySelector("input");
  wrap.hidden=repeat!=="monthly";
- if(repeat==="monthly"){const date=document.querySelector('#task-form [name="date"]').value;if(date)input.value=Number(date.slice(8,10));}
+ if(repeat==="monthly"){const date=document.querySelector("#"+prefix+'-form [name="date"]').value;if(date)input.value=Number(date.slice(8,10));}
+}
+function updateTaskRepeatFields(){updateRepeatFields("task");}
+function updatePolarityPhrase(){
+ const negative=document.getElementById("habit-polarity").value==="negative";
+ document.getElementById("habit-polarity-phrase").textContent=negative?"Menos de":"Pelo menos";
 }
 function updateHabitCategoryFields(){
  const count=document.getElementById("habit-category").value==="count";
  setSectionDisabled("quit-habit-fields",count);setSectionDisabled("count-habit-fields",!count);
- updateHabitPeriodFields();updateHabitMeasureFields();
+ updateHabitPeriodFields();updateHabitMeasureFields();updatePolarityPhrase();
 }
 function updateHabitPeriodFields(){
  const daily=document.getElementById("habit-period-unit").value==="day";
  setSectionDisabled("habit-schedule-wrap",!daily);updateHabitScheduleFields();
 }
 function updateHabitScheduleFields(){
- const mode=document.getElementById("habit-schedule-mode").value;
+ const checked=document.querySelector('#habit-form [name="scheduleMode"]:checked'),mode=checked?checked.value:"all_days";
  setSectionDisabled("habit-weekdays-wrap",mode!=="specific_weekdays");
  setSectionDisabled("habit-days-per-week-wrap",mode!=="days_per_week");
 }

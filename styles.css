@@ -176,3 +176,68 @@ input::placeholder,textarea::placeholder{color:#79838d}
 .calendar-toolbar h2,.calendar-details .card-heading h2{text-transform:none}
 .calendar-details small{font-size:10px}
 .dialog-delete{order:-1}
+
+/* ===== Lembretes: cartões em grid de 4 ===== */
+.nav-icon svg{display:block;margin:0 auto}
+.reminder-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.reminder-grid .empty-state{grid-column:1/-1}
+.reminder-card{display:flex;flex-direction:column;gap:8px;min-height:132px;padding:14px 12px 14px 16px;border:1px solid var(--line);border-radius:13px;background:#171d23;cursor:default}
+.reminder-card:hover{border-color:#3a4650}
+.reminder-card-top{display:flex;align-items:center;gap:8px}
+.reminder-icon{display:grid;place-items:center;width:30px;height:30px;border-radius:9px;background:#302c21;color:#eedb8c}
+.reminder-icon svg{width:16px;height:16px}
+.reminder-time{font:700 13px Manrope,sans-serif;color:var(--ink)}
+.reminder-title{font:700 14px Manrope,sans-serif;letter-spacing:-.2px;line-height:1.35;overflow-wrap:anywhere}
+.reminder-meta{color:var(--muted);font-size:10px}
+.reminder-note{margin:0;color:#b4c0ca;font-size:11px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.calendar-side{position:sticky;top:16px;display:grid;gap:16px;max-height:calc(100vh - 32px);overflow:auto}
+.calendar-side .calendar-details{position:static;max-height:none;overflow:visible}
+.calendar-reminders{padding:18px}
+.calendar-reminders .card-heading{margin-bottom:6px}
+.calendar-reminders .card-heading h2{font-size:15px}
+.calendar-reminders .calendar-detail-row{padding:10px 0}
+.calendar-reminders .calendar-detail-row:last-child{border-bottom:0}
+@media(max-width:1250px){.reminder-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:980px){.reminder-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){.reminder-grid{grid-template-columns:1fr}}
+@media(max-width:1100px){.calendar-side{position:static;max-height:none}}
+.reminder-always{padding:10px 12px;border:1px solid #3b3626;border-radius:9px;background:#26231a;color:#e3d7a6}
+
+/* ===== Sino silencioso (notificação do Discord desligada) ===== */
+.muted-bell{position:relative;display:inline-grid;place-items:center;flex:0 0 auto;margin-left:7px;color:#8f9aa5;vertical-align:middle;cursor:help;outline:none}
+.muted-bell svg{width:14px;height:14px;display:block}
+.muted-bell:hover,.muted-bell:focus-visible{color:#e6e9ed}
+.muted-bell::after{content:attr(data-tip);position:absolute;left:-4px;top:calc(100% + 7px);z-index:40;padding:6px 9px;border:1px solid #39434e;border-radius:7px;background:#222a32;color:#e6e9ed;font:600 11px "DM Sans",sans-serif;white-space:nowrap;box-shadow:0 8px 22px rgba(0,0,0,.4);opacity:0;transform:translateY(-3px);pointer-events:none;transition:opacity .12s,transform .12s}
+.muted-bell:hover::after,.muted-bell:focus-visible::after{opacity:1;transform:none}
+.task-title-line{display:flex;align-items:center;min-width:0}
+.task-title-line .task-title{min-width:0}
+.task-title-line .muted-bell{margin-left:7px}
+
+/* ===== Hábito de contagem: frase + radio buttons ===== */
+.count-sentence{display:flex;flex-wrap:wrap;align-items:center;gap:10px 10px}
+.count-sentence .inline-field{display:flex;align-items:center;gap:8px}
+.count-sentence .inline-field[hidden]{display:none}
+.count-phrase{color:#d5dce2;font-size:12px;font-weight:700;white-space:nowrap}
+.form-dialog .count-sentence input[type="number"]{width:78px;height:40px;padding:0 10px}
+.form-dialog .count-sentence select{width:auto;min-width:104px}
+.form-dialog .count-sentence .inline-field input{width:64px}
+.form-divider{width:100%;height:1px;margin:4px 0;border:0;background:#2c343d}
+.radio-group{display:grid;gap:12px}
+.form-dialog .radio-option{display:flex;align-items:center;gap:11px;color:#d5dce2;font-size:12px;font-weight:600;cursor:pointer}
+.form-dialog .radio-option input{position:absolute;opacity:0;width:0;height:0;padding:0;border:0;pointer-events:none}
+.radio-mark{flex:0 0 20px;display:grid;place-items:center;width:20px;height:20px;border:2px solid #4a5560;border-radius:50%;background:#11171d;transition:border-color .12s}
+.radio-option:hover .radio-mark{border-color:#6b7782}
+.radio-option input:checked+.radio-mark{border-color:#57b58a}
+.radio-option input:checked+.radio-mark::after{content:"";width:10px;height:10px;border-radius:50%;background:#57b58a}
+.radio-option input:focus-visible+.radio-mark{box-shadow:0 0 0 3px rgba(87,181,138,.28)}
+.radio-group .weekday-options{margin:0 0 2px 31px}
+.radio-group #habit-days-per-week-wrap{margin-left:31px}
+
+/* ===== Ajustes finos (lembretes / hábito) ===== */
+.calendar-side{grid-template-columns:minmax(0,1fr)}
+.calendar-reminders .calendar-detail-row strong{font-size:12px}
+.calendar-reminders .calendar-detail-row small{font-size:10px}
+.calendar-reminders .calendar-detail-icon{display:grid;place-items:center;color:#eedb8c}
+.count-sentence{margin-bottom:4px}
+.form-divider{margin:12px 0 14px}
+.radio-group{margin-bottom:14px}
