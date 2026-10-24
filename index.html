@@ -8,10 +8,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=d1c44928">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0"></script>
   <script src="supabase-config.js"></script>
-  <script src="app.js?v=9749f840" defer></script>
+  <script src="app.js?v=246ae06c" defer></script>
 </head>
 <body>
   <main class="auth-screen" id="auth-screen">
@@ -91,11 +91,32 @@
         </section>
 
         <section class="view-panel" id="view-tarefas">
-          <div class="welcome-row"><div><div class="eyebrow">UM PASSO DE CADA VEZ</div><h1>Suas tarefas<span class="heading-period">.</span></h1><p class="page-subtitle">Tire as ideias da cabeça e coloque no seu dia.</p></div><button class="primary-button" data-open="task-dialog"><span>＋</span> Nova tarefa</button></div>
-          <section class="content-card full-card"><div class="card-heading"><div><div class="eyebrow">PLANEJAMENTO</div><h2>Lista de tarefas</h2></div><select id="task-filter" class="select-control" aria-label="Filtrar tarefas"><option value="all">Todas as datas</option><option value="today">Hoje</option><option value="upcoming">Próximas</option><option value="done">Concluídas</option></select></div><div id="all-task-list" class="task-list"></div></section>
+          <div class="welcome-row tasks-header">
+            <div><div class="eyebrow">UM PASSO DE CADA VEZ</div><h1>Tarefas do dia<span class="heading-period">.</span></h1><p class="page-subtitle">Tire as ideias da cabeça e coloque no seu dia.</p></div>
+            <div class="day-carousel-wrap">
+              <button class="today-jump" id="task-today-jump" type="button" hidden>Hoje</button>
+              <div class="day-carousel" id="task-day-carousel">
+                <button class="carousel-arrow" id="task-day-prev" type="button" aria-label="Dias anteriores">‹</button>
+                <div class="carousel-days" id="task-day-days"></div>
+                <button class="carousel-arrow" id="task-day-next" type="button" aria-label="Próximos dias">›</button>
+                <button class="carousel-calendar" id="task-day-calendar" type="button" aria-label="Abrir calendário" title="Abrir calendário">▦</button>
+              </div>
+            </div>
+            <button class="primary-button" data-open="task-dialog"><span>＋</span> Nova tarefa</button>
+          </div>
+          <section class="content-card full-card"><div class="card-heading"><div><div class="eyebrow">PLANEJAMENTO</div><h2 id="task-day-label"></h2></div></div><div id="all-task-list" class="task-list"></div></section>
         </section>
 
-        <section class="view-panel" id="view-calendario"><div class="welcome-row"><div><div class="eyebrow">SEU ESPAÇO · VISÃO COMPLETA</div><h1>Calendário<span class="heading-period">.</span></h1><p class="page-subtitle">Tarefas, metas e hábitos ao longo do tempo.</p></div></div><section class="content-card full-card calendar-card"><div class="calendar-toolbar"><button class="secondary-button" data-calendar-shift="-1" type="button" aria-label="Mês anterior">←</button><h2 id="calendar-month-label"></h2><button class="secondary-button" data-calendar-shift="1" type="button" aria-label="Próximo mês">→</button></div><div class="calendar-grid" id="calendar-grid"></div></section><section class="content-card full-card calendar-details"><div class="card-heading"><div><div class="eyebrow">DETALHES DO DIA</div><h2 id="calendar-selected-label"></h2></div></div><div id="calendar-selected-details"></div></section></section>
+        <section class="view-panel" id="view-calendario">
+          <div class="welcome-row"><div><div class="eyebrow">SEU ESPAÇO · VISÃO COMPLETA</div><h1>Calendário<span class="heading-period">.</span></h1><p class="page-subtitle">Tarefas, metas e hábitos ao longo do tempo.</p></div></div>
+          <div class="calendar-layout">
+            <section class="content-card full-card calendar-card"><div class="calendar-toolbar"><button class="secondary-button" data-calendar-shift="-1" type="button" aria-label="Mês anterior">←</button><h2 id="calendar-month-label"></h2><button class="secondary-button" data-calendar-shift="1" type="button" aria-label="Próximo mês">→</button></div><div class="calendar-grid" id="calendar-grid"></div></section>
+            <aside class="content-card calendar-details" aria-label="Detalhes do dia">
+              <div class="card-heading"><div><div class="eyebrow">DETALHES DO DIA</div><h2 id="calendar-selected-label"></h2></div><button class="icon-button calendar-add" id="calendar-add" type="button" aria-label="Adicionar ao dia selecionado" aria-haspopup="menu" title="Adicionar ao dia">＋</button></div>
+              <div id="calendar-selected-details"></div>
+            </aside>
+          </div>
+        </section>
 
         <section class="view-panel" id="view-metas">
           <div class="welcome-row"><div><div class="eyebrow">O QUE VOCÊ QUER ALCANÇAR?</div><h1>Metas<span class="heading-period">.</span></h1><p class="page-subtitle">Acompanhe seu progresso sem perder de vista o que importa.</p></div><button class="primary-button" data-open="goal-dialog"><span>＋</span> Nova meta</button></div>
@@ -105,7 +126,6 @@
         <section class="view-panel" id="view-habitos">
           <div class="welcome-row"><div><div class="eyebrow">CONSISTÊNCIA, NÃO PERFEIÇÃO</div><h1>Seus hábitos<span class="heading-period">.</span></h1><p class="page-subtitle">Acompanhe sua jornada. Recomeçar também faz parte.</p></div><button class="primary-button" data-open="habit-dialog"><span>＋</span> Novo hábito</button></div>
           <div class="habit-grid" id="habit-list"></div>
-          <div class="gentle-note"><span>✦</span><p>Uma recaída não apaga seu progresso. Seu histórico continua registrado quando você reinicia a contagem.</p></div>
         </section>
       </div>
       <footer class="page-footer"><span>feito para seguir em frente</span><span class="footer-mark">ritmo<span>.</span></span></footer>
@@ -120,7 +140,8 @@
       <label>Repetição<select id="task-repeat" name="repeat" class="select-control"><option value="once">Uma vez</option><option value="daily">Todos os dias</option><option value="weekly">Toda semana, no mesmo dia</option><option value="monthly">Todo mês, no mesmo dia</option></select></label>
       <label id="task-month-day-wrap" hidden>Dia do mês<input name="monthDay" type="number" min="1" max="31" value="1"></label>
       <label class="optional-label">Nota <span>(opcional)</span><textarea name="note" rows="2" maxlength="180" placeholder="Algum detalhe para lembrar?"></textarea></label>
-      <div class="dialog-actions"><button class="secondary-button" type="button" data-dialog-cancel>Cancelar</button><button class="primary-button" type="submit">Adicionar tarefa</button></div>
+      <label class="settings-checkbox"><input name="notify" type="checkbox" checked> Receber lembrete no Discord</label>
+      <div class="dialog-actions"><button class="secondary-button" type="button" data-dialog-cancel>Cancelar</button><button class="danger-button dialog-delete" type="button" data-dialog-delete hidden>Excluir</button><button class="primary-button" type="submit">Adicionar tarefa</button></div>
     </form>
   </dialog>
 
@@ -130,7 +151,8 @@
       <label>Nome da meta<input name="title" maxlength="70" placeholder="Ex.: Beber água" required></label>
       <div class="form-row"><label>Quantidade por dia<input name="target" type="number" min="1" max="999" value="8" required></label><label>Unidade<input name="unit" maxlength="24" placeholder="copos" value="vezes" required></label></div>
       <div class="form-row"><label>Começa em<input name="startDate" type="date" required></label><label>Termina em <span>(opcional)</span><input name="endDate" type="date"></label></div>
-      <div class="dialog-actions"><button class="secondary-button" type="button" data-dialog-cancel>Cancelar</button><button class="primary-button" type="submit">Criar meta</button></div>
+      <label class="settings-checkbox"><input name="notify" type="checkbox" checked> Avisar no Discord quando a meta for alcançada</label>
+      <div class="dialog-actions"><button class="secondary-button" type="button" data-dialog-cancel>Cancelar</button><button class="danger-button dialog-delete" type="button" data-dialog-delete hidden>Excluir</button><button class="primary-button" type="submit">Criar meta</button></div>
     </form>
   </dialog>
 
@@ -149,7 +171,7 @@
           <label id="habit-days-per-week-wrap" hidden>Dias por semana<input name="daysPerWeek" type="number" min="1" max="7" value="3"></label></div>
         <label>Começa em<input name="countStartDate" type="date" required></label><p class="form-hint">Use “Registrar” no cartão para somar a atividade. Os registros aparecem no resumo diário.</p>
       </div>
-      <div class="dialog-actions"><button class="secondary-button" type="button" data-dialog-cancel>Cancelar</button><button class="primary-button" type="submit">Criar hábito</button></div>
+      <div class="dialog-actions"><button class="secondary-button" type="button" data-dialog-cancel>Cancelar</button><button class="danger-button dialog-delete" type="button" data-dialog-delete hidden>Excluir</button><button class="primary-button" type="submit">Criar hábito</button></div>
     </form>
   </dialog>
   <dialog class="form-dialog settings-dialog" id="settings-dialog">
@@ -189,6 +211,7 @@
       <div class="dialog-actions"><button class="secondary-button" id="confirm-cancel" type="button">Cancelar</button><button class="primary-button" id="confirm-accept" type="submit">Confirmar</button></div>
     </form>
   </dialog>
+  <div class="site-menu" id="site-menu" role="menu" hidden></div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </body>
 </html>

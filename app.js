@@ -18,6 +18,10 @@ let toastTimer;
 let today = "";
 let calendarCursor = null;
 let selectedCalendarDate = null;
+let taskSelectedDate = null;
+let taskWindowStart = null;
+let currentView = "hoje";
+const calendarGroupOpen = { tasks: true, goals: true, habits: true };
 
 function activeTimezone() {
   return (state.settings && state.settings.timezone) || "America/Sao_Paulo";
@@ -174,14 +178,21 @@ function offsetDateFrom(key, days) {
   return date.toISOString().slice(0, 10);
 }
 
-function taskMarkup(occurrence) {
+function moreButton(type, id) {
+  return '<button class="more-button" type="button" data-action="edit-item" data-item-type="' + type + '" data-id="' + id + '" aria-label="Configurações (' + ITEM_META[type].noun + ')" title="Configurações">⋯</button>';
+}
+
+function taskMarkup(occurrence, options = {}) {
+  const showDate = options.showDate !== false;
+  const repeatLabel = { once: "Única", daily: "Diária", weekly: "Semanal", monthly: "Mensal" }[occurrence.task.repeat_frequency] || "";
   const dateLabel = occurrence.date === today ? "Hoje" : formatDate(occurrence.date, { day: "numeric", month: "short" });
-  const meta = dateLabel + (occurrence.note ? " · " + escapeHtml(occurrence.note) : "");
-  return '<div class="task-row ' + (occurrence.done ? "completed" : "") + '">' +
+  const note = occurrence.note ? " · " + escapeHtml(occurrence.note) : "";
+  const meta = showDate ? dateLabel + note : repeatLabel + note;
+  return '<div class="task-row ' + (occurrence.done ? "completed" : "") + '" data-item-type="task" data-id="' + occurrence.id + '">' +
     '<button class="check-button ' + (occurrence.done ? "done" : "") + '" data-action="toggle-task" data-id="' + occurrence.id + '" data-date="' + occurrence.date + '" aria-label="' + (occurrence.done ? "Marcar como pendente" : "Concluir tarefa") + '">' + (occurrence.done ? "✓" : "") + "</button>" +
     '<div class="task-info"><div class="task-title">' + escapeHtml(occurrence.title) + '</div><div class="task-meta">' + meta + "</div></div>" +
     (occurrence.time ? '<time class="task-time">' + escapeHtml(occurrence.time) + "</time>" : "") +
-    '<button class="delete-button" data-action="delete-task" data-id="' + occurrence.id + '" aria-label="Excluir tarefa">×</button></div>';
+    moreButton("task", occurrence.id) + "</div>";
 }
 
 function goalMarkup(goal, featured = false) {
@@ -190,8 +201,8 @@ function goalMarkup(goal, featured = false) {
   const percent = target > 0 ? Math.min(100, Math.round((progress / target) * 100)) : 0;
   const remaining = Math.max(0, target - progress);
   const areaClass = featured ? "goal-feature" : "goal-card";
-  return '<article class="' + areaClass + '">' +
-    (featured ? "" : '<div class="goal-card-top"><div class="goal-card-icon">◎</div><div><div class="goal-card-title">' + escapeHtml(goal.name) + '</div><div class="goal-card-sub">Meta diária · ' + target + " " + escapeHtml(goal.unit) + '</div><div class="goal-card-sub">Válida de ' + escapeHtml(formatDate(goal.starts_on)) + (goal.ends_on ? ' até ' + escapeHtml(formatDate(goal.ends_on)) : ' · sem data final') + '</div></div><span class="card-spacer"></span><button class="delete-button" data-action="delete-goal" data-id="' + goal.id + '" aria-label="Excluir meta">×</button></div>') +
+  return '<article class="' + areaClass + '" data-item-type="goal" data-id="' + goal.id + '">' +
+    (featured ? "" : '<div class="goal-card-top"><div class="goal-card-icon">◎</div><div><div class="goal-card-title">' + escapeHtml(goal.name) + '</div><div class="goal-card-sub">Meta diária · ' + target + " " + escapeHtml(goal.unit) + '</div><div class="goal-card-sub">Válida de ' + escapeHtml(formatDate(goal.starts_on)) + (goal.ends_on ? ' até ' + escapeHtml(formatDate(goal.ends_on)) : ' · sem data final') + '</div></div><span class="card-spacer"></span>' + moreButton("goal", goal.id) + '</div>') +
     (featured ? '<div class="goal-feature-title">' + escapeHtml(goal.name) + '</div><div class="goal-feature-sub">Sua meta é ' + target + " " + escapeHtml(goal.unit) + " por dia.</div>" : "") +
     '<div class="goal-number-row"><span class="goal-number">' + progress + '</span><span class="goal-target">/ ' + target + " " + escapeHtml(goal.unit) + "</span></div>" +
     '<div class="goal-progress"><span style="width:' + percent + '%"></span></div>' +
@@ -245,7 +256,7 @@ function habitMarkup(habit) {
     const range=habitPeriodRange(habit,today),unit=habit.measure_unit||"vezes";
     const cadence="A cada "+(habit.period_interval>1?habit.period_interval+" ":"")+({day:"dia(s)",week:"semana(s)",month:"mês(es)",year:"ano(s)"}[habit.period_unit||"day"]);
     const schedule=habit.schedule_mode==="specific_weekdays"?"Dias: "+(habit.repeat_days||[]).map(Number).map((day)=>["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"][day]).join(", "):habit.schedule_mode==="days_per_week"?"Em "+habit.days_per_week+" dia(s) por semana":"Registros no período";
-    return '<article class="habit-card"><div class="habit-card-top"><div class="habit-card-icon">↻</div><div><div class="habit-card-title">'+escapeHtml(habit.name)+'</div><div class="habit-card-sub">Contagem · '+(negative?"negativa":"positiva")+'</div></div><span class="card-spacer"></span><button class="delete-button" data-action="delete-habit" data-id="'+habit.id+'" aria-label="Excluir hábito">×</button></div>'+
+    return '<article class="habit-card" data-item-type="habit" data-id="'+habit.id+'"><div class="habit-card-top"><div class="habit-card-icon">↻</div><div><div class="habit-card-title">'+escapeHtml(habit.name)+'</div><div class="habit-card-sub">Contagem · '+(negative?"negativa":"positiva")+'</div></div><span class="card-spacer"></span>'+moreButton("habit",habit.id)+'</div>'+
     '<div class="count-habit-rule">'+(negative?"Menos de ":"Pelo menos ")+target+" "+escapeHtml(unit)+" · "+cadence+'</div><div class="habit-days-row"><div class="habit-days">'+amount+'<span>'+escapeHtml(unit)+'</span></div><span class="milestone-tag">'+(achieved?"Alvo do período atingido ✦":escapeHtml(formatDate(range.start,{day:"numeric",month:"short"}))+" — "+escapeHtml(formatDate(range.end,{day:"numeric",month:"short"})))+'</span></div>'+
     '<div class="milestone-track"><span style="width:'+percent+'%"></span></div><div class="habit-card-footer"><span>'+escapeHtml(schedule)+'</span><button class="reset-button" data-action="increment-habit" data-id="'+habit.id+'">＋ Registrar</button></div></article>';
   }
@@ -257,69 +268,111 @@ function habitMarkup(habit) {
   const previousMs=previous?previous.date.getTime():startMs,progress=Math.min(100,Math.max(0,(nowMs-previousMs)/(next.date.getTime()-previousMs)*100));
   const isMilestoneToday=previous&&dateKeyInZone(previous.date)===today;
   const subtitle=habit.quit_started_at?"Parou em "+new Intl.DateTimeFormat("pt-BR",{dateStyle:"medium",timeStyle:"short",timeZone:activeTimezone()}).format(new Date(habit.quit_started_at)):"Começou em "+formatDate(start);
-  return '<article class="habit-card"><div class="habit-card-top"><div class="habit-card-icon">✳</div><div><div class="habit-card-title">'+escapeHtml(habit.name)+'</div><div class="habit-card-sub">'+escapeHtml(subtitle)+'</div></div><span class="card-spacer"></span><button class="delete-button" data-action="delete-habit" data-id="'+habit.id+'" aria-label="Excluir hábito">×</button></div>'+
+  return '<article class="habit-card" data-item-type="habit" data-id="'+habit.id+'"><div class="habit-card-top"><div class="habit-card-icon">✳</div><div><div class="habit-card-title">'+escapeHtml(habit.name)+'</div><div class="habit-card-sub">'+escapeHtml(subtitle)+'</div></div><span class="card-spacer"></span>'+moreButton("habit",habit.id)+'</div>'+
   '<div class="habit-days-row"><div class="habit-days">'+elapsed+"<span>"+(elapsed===1?"dia":"dias")+'</span></div><span class="milestone-tag">'+(isMilestoneToday?"Marco de "+previous.label+" ✦":"Próximo marco: "+next.label)+'</span></div><div class="milestone-track"><span style="width:'+progress+'%"></span></div><div class="habit-card-footer"><span>O histórico continua guardado ao recomeçar.</span><button class="reset-button" data-action="reset-habit" data-id="'+habit.id+'">↻ Reiniciar</button></div></article>';
 }
 
-function renderAllTasks() {
-  const filter = document.getElementById("task-filter").value;
-  let tasks = [];
-  if (filter === "today") {
-    tasks = occurrencesBetween(today, today);
-  } else if (filter === "upcoming") {
-    tasks = occurrencesBetween(offsetDate(1), offsetDate(14));
-  } else if (filter === "done") {
-    tasks = state.checkins
-      .filter((item) => item.status === "completed")
-      .map((item) => {
-        const task = state.tasks.find((candidate) => candidate.id === item.task_id);
-        return task ? taskOccurrence(task, item.occurrence_date) : null;
-      })
-      .filter(Boolean)
-      .sort((a, b) => (b.date + (b.time || "")).localeCompare(a.date + (a.time || "")));
-  } else {
-    const recurringStart = offsetDate(-7);
-    const recurringEnd = offsetDate(7);
-    tasks = state.tasks
-      .filter((task) => task.repeat_frequency === "once")
-      .map((task) => taskOccurrence(task, dateKeyInZone(new Date(task.scheduled_at))))
-      .concat(occurrencesBetween(recurringStart, recurringEnd).filter((item) => item.task.repeat_frequency !== "once"));
-    tasks = tasks.sort((a, b) => (a.date + (a.time || "99:99")).localeCompare(b.date + (b.time || "99:99")));
-  }
-  return tasks.length ? tasks.map(taskMarkup).join("") : emptyState("Nada por aqui", "Suas tarefas vão aparecer nesta lista.");
+function capitalize(text) { return text ? text.charAt(0).toUpperCase() + text.slice(1) : text; }
+function weekdayLabel(date) { return capitalize(formatDate(date, { weekday: "short" }).replace(".", "")); }
+
+function focusTaskDay(date) {
+  taskSelectedDate = date;
+  const visible = taskWindowStart && [0, 1, 2].some((index) => offsetDateFrom(taskWindowStart, index) === date);
+  if (!visible) taskWindowStart = offsetDateFrom(date, -1);
+}
+
+function renderTaskDay() {
+  if (!taskSelectedDate) taskSelectedDate = today;
+  if (!taskWindowStart) taskWindowStart = offsetDateFrom(taskSelectedDate, -1);
+  const days = [0, 1, 2].map((index) => offsetDateFrom(taskWindowStart, index));
+  const busy = occurrencesBetween(days[0], days[2]);
+  document.getElementById("task-day-days").innerHTML = days.map((date) =>
+    '<button type="button" class="carousel-day' + (date === taskSelectedDate ? " is-selected" : "") + (date === today ? " is-today" : "") + '" data-task-day="' + date + '" aria-pressed="' + (date === taskSelectedDate) + '" aria-label="' + escapeHtml(formatDate(date, { weekday: "long", day: "numeric", month: "long" })) + '">' +
+    "<small>" + weekdayLabel(date) + "</small><strong>" + Number(date.slice(8, 10)) + '</strong><i class="day-dot' + (busy.some((item) => item.date === date) ? " has" : "") + '"></i></button>').join("");
+  document.getElementById("task-today-jump").hidden = days.includes(today);
+  const label = capitalize(formatDate(taskSelectedDate, { weekday: "long", day: "numeric", month: "long" }));
+  document.getElementById("task-day-label").textContent = (taskSelectedDate === today ? "Hoje · " : "") + label;
+  const tasks = occurrencesBetween(taskSelectedDate, taskSelectedDate);
+  document.getElementById("all-task-list").innerHTML = tasks.length
+    ? tasks.map((task) => taskMarkup(task, { showDate: false })).join("")
+    : emptyState("Nada marcado para este dia", "As tarefas deste dia vão aparecer aqui.");
 }
 
 function upcomingPreviewMarkup() {
-  const all=occurrencesBetween(today,offsetDate(35)).filter((event)=>event.date>=today);
-  const events=all.slice(0,3),monthly=all.find((event)=>event.task.repeat_frequency==="monthly");
-  if(monthly&&!events.some((event)=>event.id===monthly.id&&event.date===monthly.date))events.push(monthly);
-  events.sort((a,b)=>(a.date+(a.time||"99:99")).localeCompare(b.date+(b.time||"99:99")));
-  return events.length?events.slice(0,4).map((event)=>'<div class="preview-row"><span class="preview-date">'+escapeHtml(event.date===today?"Hoje":formatDate(event.date))+'</span><div><strong>'+escapeHtml(event.title)+'</strong><small>'+escapeHtml(event.task.repeat_frequency==="monthly"?"Tarefa mensal · ":"") + escapeHtml(event.time||"Sem horário")+'</small></div></div>').join(""):emptyState("Sem tarefas próximas","Tarefas futuras aparecerão aqui.");
-}
-function calendarDurationEntries(date) {
-  const goals=state.goals.filter((item)=>item.starts_on<=date&&(!item.ends_on||item.ends_on>=date)).map((item)=>({kind:"goal",label:"Meta · "+item.name}));
-  const habits=state.habits.filter((item)=>(item.started_on||today)<=date).map((item)=>({kind:"habit",label:(item.category==="quit"?"Parar · ":"Contagem · ")+item.name}));
-  const resets=(state.resets||[]).filter((item)=>item.reset_on===date).map((item)=>({kind:"reset",label:"Recomeço · "+(state.habits.find((habit)=>habit.id===item.habit_id)||{}).name}));
-  return goals.concat(habits,resets);
-}
-function renderCalendar() {
-  const grid=document.getElementById("calendar-grid");if(!grid)return;
-  if(!calendarCursor)calendarCursor=today.slice(0,7)+"-01";if(!selectedCalendarDate)selectedCalendarDate=today;
-  const monthStart=dateFromKey(calendarCursor),offset=(monthStart.getUTCDay()+6)%7,gridStart=offsetDateFrom(calendarCursor,-offset),gridEnd=offsetDateFrom(gridStart,41),occurrences=occurrencesBetween(gridStart,gridEnd);
-  const heading=new Intl.DateTimeFormat("pt-BR",{month:"long",year:"numeric",timeZone:"UTC"}).format(monthStart);
-  document.getElementById("calendar-month-label").textContent=heading.charAt(0).toUpperCase()+heading.slice(1);
-  let output=["Seg","Ter","Qua","Qui","Sex","Sáb","Dom"].map((day)=>'<div class="calendar-weekday">'+day+'</div>').join("");
-  for(let i=0;i<42;i+=1){
-    const date=offsetDateFrom(gridStart,i),tasks=occurrences.filter((event)=>event.date===date),spans=calendarDurationEntries(date);
-    const chips=tasks.slice(0,2).map((event)=>'<span class="calendar-chip task-chip">'+escapeHtml(event.time||"")+' '+escapeHtml(event.title)+'</span>').concat(spans.slice(0,Math.max(0,3-Math.min(2,tasks.length))).map((event)=>'<span class="calendar-chip '+event.kind+'-chip">'+escapeHtml(event.label)+'</span>'));
-    output+='<button type="button" class="calendar-day '+(date.slice(0,7)!==calendarCursor.slice(0,7)?"outside-month ":"")+(date===today?"is-today ":"")+(date===selectedCalendarDate?"is-selected":"")+'" data-calendar-date="'+date+'"><span class="calendar-day-number">'+Number(date.slice(8,10))+'</span><span class="calendar-day-events">'+(chips.join("")||'<span class="calendar-no-events">—</span>')+'</span></button>';
+  let events = occurrencesBetween(today, today);
+  if (!events.length) {
+    const future = occurrencesBetween(offsetDate(1), offsetDate(370));
+    if (future.length) events = future.filter((event) => event.date === future[0].date);
   }
-  grid.innerHTML=output;
-  const dayEvents=occurrences.filter((event)=>event.date===selectedCalendarDate),spans=calendarDurationEntries(selectedCalendarDate);
-  const taskDetails=dayEvents.length?dayEvents.map((event)=>'<div class="calendar-detail-row"><span class="calendar-detail-icon">◷</span><div><strong>'+escapeHtml(event.title)+'</strong><small>'+escapeHtml(event.time||"Sem horário")+(event.note?" · "+escapeHtml(event.note):"")+'</small></div><span class="calendar-detail-type">Tarefa</span></div>').join(""):emptyState("Nenhuma tarefa","Nada agendado para este dia.");
-  const spanDetails=spans.map((event)=>'<div class="calendar-detail-row"><span class="calendar-detail-icon">'+(event.kind==="goal"?"◎":"✳")+'</span><div><strong>'+escapeHtml(event.label.replace(/^(Meta|Parar|Contagem) · /,""))+'</strong><small>Ativa nesta data</small></div><span class="calendar-detail-type">'+(event.kind==="goal"?"Meta":"Hábito")+'</span></div>').join("");
-  document.getElementById("calendar-selected-label").textContent=formatDate(selectedCalendarDate,{weekday:"long",day:"numeric",month:"long",year:"numeric"});
-  document.getElementById("calendar-selected-details").innerHTML=taskDetails+spanDetails;
+  if (!events.length) return emptyState("Você não tem atividades chegando.", "");
+  const names = { once: "", daily: "Tarefa diária · ", weekly: "Tarefa semanal · ", monthly: "Tarefa mensal · " };
+  return events.map((event) => '<div class="preview-row' + (event.done ? " is-upcoming-done" : "") + '" data-item-type="task" data-id="' + event.id + '"><span class="preview-date">' + escapeHtml(event.date === today ? "Hoje" : formatDate(event.date)) + "</span><div><strong>" + escapeHtml(event.title) + "</strong><small>" + escapeHtml(names[event.task.repeat_frequency] || "") + escapeHtml(event.time || "Sem horário") + "</small></div></div>").join("");
+}
+
+function goalActiveOn(goal, date) {
+  return goal.starts_on <= date && (!goal.ends_on || goal.ends_on >= date);
+}
+
+function habitActiveOn(habit, date) {
+  if (date < (habit.started_on || today)) return false;
+  if (habit.category === "quit") return date <= today;
+  if ((habit.period_unit || "day") === "day" && habit.schedule_mode === "specific_weekdays") {
+    return (habit.repeat_days || []).map(Number).includes(new Date(date + "T00:00:00Z").getUTCDay());
+  }
+  return true;
+}
+
+function plural(count, one, many) { return count + " " + (count === 1 ? one : many); }
+
+function detailGroup(key, title, count, rows, emptyText) {
+  return '<details class="detail-group" data-group="' + key + '"' + (calendarGroupOpen[key] ? " open" : "") + "><summary><span>" + title + "</span><em>" + count + '</em></summary><div class="detail-group-body">' + (rows || '<p class="detail-empty">' + emptyText + "</p>") + "</div></details>";
+}
+
+function goalDetailRow(goal) {
+  return '<div class="calendar-detail-row" data-item-type="goal" data-id="' + goal.id + '"><span class="calendar-detail-icon">◎</span><div><strong>' + escapeHtml(goal.name) + "</strong><small>Meta diária · " + Number(goal.target_value) + " " + escapeHtml(goal.unit) + "</small></div>" + moreButton("goal", goal.id) + "</div>";
+}
+
+function habitDetailRow(habit) {
+  const info = habit.category === "count" ? "Contagem · " + Number(habit.target_count) + " " + escapeHtml(habit.measure_unit || "vezes") : "Parar um hábito";
+  return '<div class="calendar-detail-row" data-item-type="habit" data-id="' + habit.id + '"><span class="calendar-detail-icon">' + (habit.category === "count" ? "↻" : "✳") + "</span><div><strong>" + escapeHtml(habit.name) + "</strong><small>" + info + "</small></div>" + moreButton("habit", habit.id) + "</div>";
+}
+
+function renderCalendar() {
+  const grid = document.getElementById("calendar-grid");
+  if (!grid) return;
+  if (!calendarCursor) calendarCursor = today.slice(0, 7) + "-01";
+  if (!selectedCalendarDate) selectedCalendarDate = today;
+  const monthStart = dateFromKey(calendarCursor), offset = (monthStart.getUTCDay() + 6) % 7;
+  const gridStart = offsetDateFrom(calendarCursor, -offset), gridEnd = offsetDateFrom(gridStart, 41), occurrences = occurrencesBetween(gridStart, gridEnd);
+  const heading = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric", timeZone: "UTC" }).format(monthStart);
+  document.getElementById("calendar-month-label").textContent = capitalize(heading);
+  let output = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"].map((day) => '<div class="calendar-weekday">' + day + "</div>").join("");
+  for (let i = 0; i < 42; i += 1) {
+    const date = offsetDateFrom(gridStart, i);
+    const tasks = occurrences.filter((event) => event.date === date).length;
+    const goals = state.goals.filter((goal) => goalActiveOn(goal, date)).length;
+    const habits = state.habits.filter((habit) => habitActiveOn(habit, date)).length;
+    const chips = (tasks ? '<span class="calendar-chip task-chip">' + plural(tasks, "tarefa", "tarefas") + "</span>" : "") +
+      (goals ? '<span class="calendar-chip goal-chip">' + plural(goals, "meta", "metas") + "</span>" : "") +
+      (habits ? '<span class="calendar-chip habit-chip">' + plural(habits, "hábito", "hábitos") + "</span>" : "");
+    output += '<div class="calendar-day ' + (date.slice(0, 7) !== calendarCursor.slice(0, 7) ? "outside-month " : "") + (date === today ? "is-today " : "") + (date === selectedCalendarDate ? "is-selected" : "") + '" role="button" tabindex="0" data-calendar-date="' + date + '" aria-label="' + escapeHtml(formatDate(date, { weekday: "long", day: "numeric", month: "long" })) + '">' +
+      '<span class="calendar-day-number">' + Number(date.slice(8, 10)) + '</span><button type="button" class="day-add" data-calendar-add="' + date + '" aria-label="Adicionar atividade neste dia" aria-haspopup="menu">＋</button><span class="calendar-day-events">' + chips + "</span></div>";
+  }
+  grid.innerHTML = output;
+
+  const date = selectedCalendarDate;
+  const dayTasks = occurrencesBetween(date, date);
+  const dayGoals = state.goals.filter((goal) => goalActiveOn(goal, date));
+  const dayHabits = state.habits.filter((habit) => habitActiveOn(habit, date));
+  const dayResets = (state.resets || []).filter((item) => item.reset_on === date).map((item) => {
+    const habit = state.habits.find((candidate) => candidate.id === item.habit_id);
+    return '<div class="calendar-detail-row"><span class="calendar-detail-icon">↺</span><div><strong>Recomeço · ' + escapeHtml(habit ? habit.name : "hábito") + "</strong><small>Contagem reiniciada neste dia</small></div></div>";
+  }).join("");
+  document.getElementById("calendar-selected-label").textContent = capitalize(formatDate(date, { weekday: "long", day: "numeric", month: "long" }));
+  document.getElementById("calendar-selected-details").innerHTML =
+    detailGroup("tasks", "Tarefas", dayTasks.length, dayTasks.map((task) => taskMarkup(task, { showDate: false })).join(""), "Nenhuma tarefa neste dia.") +
+    detailGroup("goals", "Metas", dayGoals.length, dayGoals.map(goalDetailRow).join(""), "Nenhuma meta neste dia.") +
+    detailGroup("habits", "Hábitos", dayHabits.length, dayHabits.map(habitDetailRow).join("") + dayResets, "Nenhum hábito neste dia.");
 }
 
 function render() {
@@ -351,7 +404,7 @@ function render() {
   document.getElementById("today-task-list").innerHTML = tasksToday.length
     ? tasksToday.map(taskMarkup).join("")
     : emptyState("Dia livre por enquanto", "Adicione uma tarefa quando quiser planejar algo.");
-  document.getElementById("all-task-list").innerHTML = renderAllTasks();
+  renderTaskDay();
   document.getElementById("upcoming-preview").innerHTML = upcomingPreviewMarkup();
   renderCalendar();
   document.getElementById("goal-list").innerHTML = state.goals.length
@@ -406,7 +459,25 @@ async function refreshData() {
   }
 }
 
-function openDialog(id) {
+const ITEM_META = {
+  task: { table: "tasks", dialog: "task-dialog", noun: "tarefa", create: ["Nova tarefa", "Adicionar tarefa"], edit: "Configurações da tarefa" },
+  goal: { table: "goals", dialog: "goal-dialog", noun: "meta", create: ["Nova meta", "Criar meta"], edit: "Configurações da meta" },
+  habit: { table: "habits", dialog: "habit-dialog", noun: "hábito", create: ["Novo hábito", "Criar hábito"], edit: "Configurações do hábito" }
+};
+
+function itemsOf(type) { return type === "task" ? state.tasks : type === "goal" ? state.goals : state.habits; }
+function findItem(type, id) { return itemsOf(type).find((item) => item.id === id); }
+
+function setDialogMode(dialog, type, item) {
+  const meta = ITEM_META[type];
+  if (item) dialog.dataset.editId = item.id; else delete dialog.dataset.editId;
+  dialog.querySelector(".dialog-top h2").textContent = item ? meta.edit : meta.create[0];
+  dialog.querySelector('form button[type="submit"]').textContent = item ? "Salvar alterações" : meta.create[1];
+  dialog.querySelector("[data-dialog-delete]").hidden = !item;
+  if (type === "habit") document.getElementById("habit-category").disabled = !!item;
+}
+
+function prepareDialog(id) {
   const dialog = document.getElementById(id);
   const form = dialog.querySelector("form");
   form.reset();
@@ -417,14 +488,192 @@ function openDialog(id) {
   if (form.elements.repeat) form.elements.repeat.value = "once";
   if (id === "task-dialog") updateTaskRepeatFields();
   if (id === "habit-dialog") updateHabitCategoryFields();
+  setDialogMode(dialog, id.replace("-dialog", ""), null);
+  return dialog;
+}
+
+function openDialog(id, presetDate) {
+  const dialog = prepareDialog(id);
+  const form = dialog.querySelector("form");
+  if (presetDate) {
+    if (form.elements.date) form.elements.date.value = presetDate;
+    if (form.elements.startDate) form.elements.startDate.value = presetDate;
+    if (form.elements.countStartDate) form.elements.countStartDate.value = presetDate;
+    if (id === "task-dialog") updateTaskRepeatFields();
+  }
   dialog.showModal();
   const firstInput = form.querySelector("input");
   if (firstInput) firstInput.focus();
 }
 
+function openEditDialog(type, id) {
+  const item = findItem(type, id);
+  if (!item) return;
+  const dialog = prepareDialog(ITEM_META[type].dialog), form = dialog.querySelector("form"), f = form.elements;
+  if (type === "task") {
+    f.title.value = item.title;
+    if (item.repeat_frequency === "once") {
+      const moment = new Date(item.scheduled_at);
+      f.date.value = dateKeyInZone(moment); f.time.value = timeKeyInZone(moment);
+    } else {
+      f.date.value = item.starts_on; f.time.value = String(item.reminder_time || "").slice(0, 5);
+    }
+    f.repeat.value = item.repeat_frequency;
+    updateTaskRepeatFields();
+    if (item.repeat_frequency === "monthly") f.monthDay.value = item.repeat_month_day;
+    f.note.value = item.description || "";
+    f.notify.checked = item.reminder_enabled !== false;
+  } else if (type === "goal") {
+    f.title.value = item.name; f.target.value = Number(item.target_value); f.unit.value = item.unit;
+    f.startDate.value = item.starts_on; f.endDate.value = item.ends_on || "";
+    f.notify.checked = item.notify_enabled !== false;
+  } else {
+    f.title.value = item.name; f.category.value = item.category;
+    if (item.category === "quit") {
+      const since = new Date(item.quit_started_at || item.current_streak_started_on + "T00:00:00Z");
+      f.startDate.value = dateKeyInZone(since); f.startTime.value = timeKeyInZone(since);
+      f.notifyMilestones.checked = item.notify_milestones !== false;
+    } else {
+      f.polarity.value = item.count_polarity; f.targetCount.value = Number(item.target_count);
+      if (["vezes", "minutos", "horas"].includes(item.measure_unit)) f.measureUnit.value = item.measure_unit;
+      else { f.measureUnit.value = "custom"; f.customUnit.value = item.measure_unit; }
+      f.periodUnit.value = item.period_unit; f.periodInterval.value = item.period_interval;
+      f.scheduleMode.value = item.schedule_mode;
+      form.querySelectorAll('[name="repeatDays"]').forEach((box) => { box.checked = (item.repeat_days || []).map(Number).includes(Number(box.value)); });
+      if (item.days_per_week) f.daysPerWeek.value = item.days_per_week;
+      f.countStartDate.value = item.started_on;
+    }
+    updateHabitCategoryFields();
+  }
+  setDialogMode(dialog, type, item);
+  dialog.showModal();
+}
+
+function taskRecordFromForm(form) {
+  const data = new FormData(form), repeat = String(data.get("repeat") || "once");
+  const date = String(data.get("date") || ""), time = String(data.get("time") || "");
+  if (!date || !time) { showToast("Escolha o dia e o horário da tarefa."); return null; }
+  const record = {
+    title: String(data.get("title")).trim(), description: String(data.get("note") || "").trim() || null,
+    repeat_frequency: repeat, reminder_enabled: form.elements.notify.checked,
+    scheduled_at: null, starts_on: null, reminder_time: null, repeat_days: [], repeat_month_day: null
+  };
+  if (repeat === "once") record.scheduled_at = zonedDateTimeToIso(date, time);
+  else {
+    record.starts_on = date; record.reminder_time = time;
+    if (repeat === "weekly") record.repeat_days = [new Date(date + "T00:00:00Z").getUTCDay()];
+    if (repeat === "monthly") record.repeat_month_day = Number(data.get("monthDay") || date.slice(8, 10));
+  }
+  return record;
+}
+
+function goalRecordFromForm(form) {
+  const data = new FormData(form);
+  const startsOn = String(data.get("startDate") || today), endsOn = String(data.get("endDate") || "") || null;
+  if (endsOn && endsOn < startsOn) { showToast("A data final deve ser igual ou posterior à data inicial."); return null; }
+  return {
+    name: String(data.get("title")).trim(), target_value: Number(data.get("target")), unit: String(data.get("unit")).trim(),
+    period: "daily", starts_on: startsOn, ends_on: endsOn, notify_enabled: form.elements.notify.checked
+  };
+}
+
+function habitRecordFromForm(form, editItem) {
+  const data = new FormData(form), category = editItem ? editItem.category : String(data.get("category") || "quit");
+  const startDate = String(data.get(category === "quit" ? "startDate" : "countStartDate") || today);
+  const record = { name: String(data.get("title")).trim() };
+  if (category === "quit") {
+    record.quit_started_at = zonedDateTimeToIso(startDate, String(data.get("startTime") || "00:00"));
+    record.current_streak_started_on = startDate;
+    record.started_on = editItem && editItem.started_on < startDate ? editItem.started_on : startDate;
+    record.notify_milestones = form.elements.notifyMilestones.checked;
+    if (!editItem) record.notification_interval_days = 5;
+  } else {
+    const unit = String(data.get("periodUnit") || "day"), measure = String(data.get("measureUnit") || "vezes");
+    record.started_on = startDate; record.current_streak_started_on = startDate;
+    record.count_polarity = String(data.get("polarity") || "positive");
+    record.target_count = Number(data.get("targetCount") || 1);
+    record.measure_unit = (measure === "custom" ? String(data.get("customUnit") || "unidades") : measure).trim();
+    record.period_unit = unit;
+    record.period_interval = Math.max(1, Number(data.get("periodInterval") || 1));
+    record.schedule_mode = unit === "day" ? String(data.get("scheduleMode") || "all_days") : "all_days";
+    record.repeat_days = record.schedule_mode === "specific_weekdays" ? Array.from(form.querySelectorAll('[name="repeatDays"]:checked')).map((input) => Number(input.value)) : [];
+    record.days_per_week = record.schedule_mode === "days_per_week" ? Number(data.get("daysPerWeek")) : null;
+    if (record.schedule_mode === "specific_weekdays" && !record.repeat_days.length) { showToast("Selecione pelo menos um dia da semana."); return null; }
+  }
+  if (!editItem) record.category = category;
+  return record;
+}
+
+function notificationState(type, item) {
+  return type === "task" ? item.reminder_enabled !== false : type === "goal" ? item.notify_enabled !== false : item.notify_milestones !== false;
+}
+
+async function toggleItemNotification(type, id) {
+  const item = findItem(type, id);
+  if (!item) return;
+  const on = notificationState(type, item), column = { task: "reminder_enabled", goal: "notify_enabled", habit: "notify_milestones" }[type];
+  const ok = await runAction(() => supabaseClient.from(ITEM_META[type].table).update({ [column]: !on }).eq("id", id).eq("user_id", currentUser.id));
+  if (ok) showToast(on ? "Notificação desativada." : "Notificação ativada.");
+}
+
+async function deleteItem(type, id) {
+  const item = findItem(type, id);
+  if (!item) return false;
+  const name = type === "task" ? item.title : item.name;
+  const text = {
+    task: ["Excluir tarefa?", 'Excluir a tarefa "' + name + '" e seus registros?', "Tarefa removida."],
+    goal: ["Excluir meta?", 'Excluir a meta "' + name + '" e seu progresso?', "Meta removida."],
+    habit: ["Excluir hábito?", 'Excluir o hábito "' + name + '" e seu histórico?', "Hábito removido."]
+  }[type];
+  if (!await confirmInSite({ title: text[0], message: text[1], accept: "Excluir", danger: true })) return false;
+  const ok = await runAction(() => supabaseClient.from(ITEM_META[type].table).delete().eq("id", id).eq("user_id", currentUser.id));
+  if (ok) showToast(text[2]);
+  return ok;
+}
+
+let siteMenuActions = [];
+function hideSiteMenu() {
+  const menu = document.getElementById("site-menu");
+  if (!menu) return;
+  menu.hidden = true; menu.innerHTML = ""; siteMenuActions = [];
+}
+
+function showSiteMenu(x, y, items, label) {
+  const menu = document.getElementById("site-menu");
+  siteMenuActions = items.map((item) => item.run);
+  menu.setAttribute("aria-label", label || "Menu");
+  menu.innerHTML = items.map((item, index) => '<button type="button" role="menuitem" class="site-menu-item' + (item.danger ? " danger" : "") + '" data-menu-index="' + index + '">' + escapeHtml(item.label) + "</button>").join("");
+  menu.hidden = false;
+  const box = menu.getBoundingClientRect();
+  menu.style.left = Math.max(8, Math.min(x, window.innerWidth - box.width - 8)) + "px";
+  menu.style.top = Math.max(8, Math.min(y, window.innerHeight - box.height - 8)) + "px";
+  const first = menu.querySelector("button");
+  if (first) first.focus({ preventScroll: true });
+}
+
+function itemMenuItems(type, id) {
+  const item = findItem(type, id);
+  const items = [{ label: "Configurações", run: () => openEditDialog(type, id) }];
+  if (item && (type !== "habit" || item.category === "quit")) {
+    items.push({ label: notificationState(type, item) ? "Desativar Notificação" : "Ativar Notificação", run: () => toggleItemNotification(type, id) });
+  }
+  items.push({ label: "Excluir", danger: true, run: () => deleteItem(type, id) });
+  return items;
+}
+
+function openAddMenu(date, anchor) {
+  const box = anchor.getBoundingClientRect();
+  showSiteMenu(box.left, box.bottom + 6, [
+    { label: "Criar tarefa", run: () => openDialog("task-dialog", date) },
+    { label: "Criar meta", run: () => openDialog("goal-dialog", date) },
+    { label: "Criar hábito", run: () => openDialog("habit-dialog", date) }
+  ], "Adicionar ao dia");
+}
+
 function switchView(name) {
   document.querySelectorAll(".view-panel").forEach((panel) => panel.classList.toggle("active", panel.id === "view-" + name));
   document.querySelectorAll(".nav-item").forEach((button) => button.classList.toggle("active", button.dataset.view === name));
+  currentView = name;
   const labels = { hoje: "Visão geral", tarefas: "Tarefas", metas: "Metas", habitos: "Hábitos", calendario: "Calendário" };
   document.getElementById("breadcrumb-current").textContent = labels[name] || labels.hoje;
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -642,12 +891,9 @@ function initializeEvents() {
       if (ok) showToast(completed ? "Tarefa concluída." : "Tarefa marcada como pendente.");
     }
 
-    if (action === "delete-task") {
-      const task = state.tasks.find((item) => item.id === id);
-      if (task && await confirmInSite({ title:"Excluir tarefa?", message:'Excluir a tarefa "' + task.title + '" e seus registros?', accept:"Excluir", danger:true })) {
-        const ok = await runAction(() => supabaseClient.from("tasks").delete().eq("id", id).eq("user_id", owner));
-        if (ok) showToast("Tarefa removida.");
-      }
+    if (action === "edit-item") {
+      openEditDialog(actionButton.dataset.itemType, id);
+      return;
     }
 
     if (action === "increment-goal") {
@@ -662,14 +908,6 @@ function initializeEvents() {
       if (entry) {
         const ok = await runAction(() => supabaseClient.from("goal_progress_entries").delete().eq("id", entry.id).eq("user_id", owner));
         if (ok) showToast("Progresso atualizado.");
-      }
-    }
-
-    if (action === "delete-goal") {
-      const goal = state.goals.find((item) => item.id === id);
-      if (goal && await confirmInSite({ title:"Excluir meta?", message:'Excluir a meta "' + goal.name + '" e seu progresso?', accept:"Excluir", danger:true })) {
-        const ok = await runAction(() => supabaseClient.from("goals").delete().eq("id", id).eq("user_id", owner));
-        if (ok) showToast("Meta removida.");
       }
     }
 
@@ -696,99 +934,91 @@ function initializeEvents() {
         }
       }
     }
-
-    if (action === "delete-habit") {
-      const habit = state.habits.find((item) => item.id === id);
-      if (habit && await confirmInSite({ title:"Excluir hábito?", message:'Excluir o hábito "' + habit.name + '" e seu histórico?', accept:"Excluir", danger:true })) {
-        const ok = await runAction(() => supabaseClient.from("habits").delete().eq("id", id).eq("user_id", owner));
-        if (ok) showToast("Hábito removido.");
-      }
-    }
-  });
-
-  document.getElementById("task-filter").addEventListener("change", () => {
-    document.getElementById("all-task-list").innerHTML = renderAllTasks();
   });
 
   document.getElementById("task-form").addEventListener("submit", async (event) => {
     event.preventDefault();
-    const form = event.currentTarget;
-    const data = new FormData(form);
-    const repeat = String(data.get("repeat") || "once");
-    const date = String(data.get("date"));
-    const time = String(data.get("time"));
-    if (!date || !time) {
-      showToast("Escolha o dia e o horário da tarefa.");
-      return;
-    }
-    const record = {
-      user_id: currentUser.id,
-      title: String(data.get("title")).trim(),
-      description: String(data.get("note") || "").trim() || null,
-      repeat_frequency: repeat,
-      reminder_enabled: true
-    };
-    if (repeat === "once") {
-      record.scheduled_at = zonedDateTimeToIso(date, time);
-    } else {
-      record.starts_on = date;
-      record.reminder_time = time;
-      if (repeat === "weekly") record.repeat_days = [new Date(date + "T00:00:00Z").getUTCDay()];
-      if (repeat === "monthly") record.repeat_month_day = Number(data.get("monthDay") || date.slice(8, 10));
-    }
-    const ok = await runAction(() => supabaseClient.from("tasks").insert(record));
+    const form = event.currentTarget, dialog = form.closest("dialog"), editId = dialog.dataset.editId;
+    const record = taskRecordFromForm(form);
+    if (!record) return;
+    const ok = await runAction(() => editId
+      ? supabaseClient.from("tasks").update(record).eq("id", editId).eq("user_id", currentUser.id)
+      : supabaseClient.from("tasks").insert({ ...record, user_id: currentUser.id }));
     if (ok) {
-      form.closest("dialog").close();
-      switchView("tarefas");
-      showToast("Tarefa adicionada.");
+      dialog.close();
+      focusTaskDay(record.repeat_frequency === "once" ? dateKeyInZone(new Date(record.scheduled_at)) : record.starts_on);
+      renderTaskDay();
+      if (!editId && currentView !== "calendario") switchView("tarefas");
+      showToast(editId ? "Tarefa atualizada." : "Tarefa adicionada.");
     }
   });
 
   document.getElementById("goal-form").addEventListener("submit", async (event) => {
     event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    const startsOn=String(data.get("startDate")||today),endsOn=String(data.get("endDate")||"")||null;
-    if(endsOn&&endsOn<startsOn){showToast("A data final deve ser igual ou posterior à data inicial.");return;}
-    const record = {
-      user_id: currentUser.id,
-      name: String(data.get("title")).trim(),
-      target_value: Number(data.get("target")),
-      unit: String(data.get("unit")).trim(),
-      period: "daily",
-      starts_on: startsOn,
-      ends_on: endsOn
-    };
-    const ok = await runAction(() => supabaseClient.from("goals").insert(record));
+    const form = event.currentTarget, dialog = form.closest("dialog"), editId = dialog.dataset.editId;
+    const record = goalRecordFromForm(form);
+    if (!record) return;
+    const ok = await runAction(() => editId
+      ? supabaseClient.from("goals").update(record).eq("id", editId).eq("user_id", currentUser.id)
+      : supabaseClient.from("goals").insert({ ...record, user_id: currentUser.id }));
     if (ok) {
-      event.currentTarget.closest("dialog").close();
-      switchView("metas");
-      showToast("Meta criada.");
+      dialog.close();
+      if (!editId && currentView !== "calendario") switchView("metas");
+      showToast(editId ? "Meta atualizada." : "Meta criada.");
     }
   });
 
   document.getElementById("habit-form").addEventListener("submit", async (event) => {
     event.preventDefault();
-    const form=event.currentTarget,data=new FormData(form),category=String(data.get("category")||"quit");
-    const startDate=String(data.get(category==="quit"?"startDate":"countStartDate")||today);
-    const record={user_id:currentUser.id,name:String(data.get("title")).trim(),category,started_on:startDate,current_streak_started_on:startDate};
-    if(category==="quit"){
-      record.quit_started_at=zonedDateTimeToIso(startDate,String(data.get("startTime")||"00:00"));
-      record.notify_milestones=form.elements.notifyMilestones.checked;
-      record.notification_interval_days=5;
-    }else{
-      const unit=String(data.get("periodUnit")||"day"),measure=String(data.get("measureUnit")||"vezes");
-      record.count_polarity=String(data.get("polarity")||"positive");
-      record.target_count=Number(data.get("targetCount")||1);
-      record.measure_unit=(measure==="custom"?String(data.get("customUnit")||"unidades"):measure).trim();
-      record.period_unit=unit;
-      record.period_interval=Math.max(1,Number(data.get("periodInterval")||1));
-      record.schedule_mode=unit==="day"?String(data.get("scheduleMode")||"all_days"):"all_days";
-      record.repeat_days=record.schedule_mode==="specific_weekdays"?Array.from(form.querySelectorAll('[name="repeatDays"]:checked')).map((input)=>Number(input.value)):[];
-      record.days_per_week=record.schedule_mode==="days_per_week"?Number(data.get("daysPerWeek")):null;
-      if(record.schedule_mode==="specific_weekdays"&&!record.repeat_days.length){showToast("Selecione pelo menos um dia da semana.");return;}
+    const form = event.currentTarget, dialog = form.closest("dialog"), editId = dialog.dataset.editId;
+    const editItem = editId ? findItem("habit", editId) : null;
+    const record = habitRecordFromForm(form, editItem);
+    if (!record) return;
+    const ok = await runAction(() => editId
+      ? supabaseClient.from("habits").update(record).eq("id", editId).eq("user_id", currentUser.id)
+      : supabaseClient.from("habits").insert({ ...record, user_id: currentUser.id }));
+    if (ok) {
+      dialog.close();
+      if (!editId && currentView !== "calendario") switchView("habitos");
+      showToast(editId ? "Hábito atualizado." : "Hábito adicionado.");
     }
-    const ok=await runAction(()=>supabaseClient.from("habits").insert(record));
-    if(ok){form.closest("dialog").close();switchView("habitos");showToast("Hábito adicionado.");}
+  });
+
+  document.querySelectorAll("[data-dialog-delete]").forEach((button) => button.addEventListener("click", async () => {
+    const dialog = button.closest("dialog"), type = dialog.id.replace("-dialog", "");
+    if (dialog.dataset.editId && await deleteItem(type, dialog.dataset.editId)) dialog.close();
+  }));
+
+  document.getElementById("task-day-prev").addEventListener("click", () => { taskWindowStart = offsetDateFrom(taskWindowStart || today, -1); renderTaskDay(); });
+  document.getElementById("task-day-next").addEventListener("click", () => { taskWindowStart = offsetDateFrom(taskWindowStart || today, 1); renderTaskDay(); });
+  document.getElementById("task-day-days").addEventListener("click", (event) => {
+    const day = event.target.closest("[data-task-day]");
+    if (day) { taskSelectedDate = day.dataset.taskDay; renderTaskDay(); }
+  });
+  document.getElementById("task-today-jump").addEventListener("click", () => { taskSelectedDate = today; taskWindowStart = offsetDateFrom(today, -1); renderTaskDay(); });
+  document.getElementById("task-day-calendar").addEventListener("click", () => {
+    selectedCalendarDate = taskSelectedDate || today;
+    calendarCursor = selectedCalendarDate.slice(0, 7) + "-01";
+    renderCalendar(); switchView("calendario");
+  });
+
+  const siteMenu = document.getElementById("site-menu");
+  siteMenu.addEventListener("click", (event) => {
+    const entry = event.target.closest("[data-menu-index]");
+    if (!entry) return;
+    const run = siteMenuActions[Number(entry.dataset.menuIndex)];
+    hideSiteMenu();
+    if (run) run();
+  });
+  document.addEventListener("click", (event) => { if (!event.target.closest("#site-menu")) hideSiteMenu(); }, true);
+  document.addEventListener("keydown", (event) => { if (event.key === "Escape") hideSiteMenu(); });
+  window.addEventListener("resize", hideSiteMenu);
+  window.addEventListener("scroll", hideSiteMenu, true);
+  document.addEventListener("contextmenu", (event) => {
+    const target = event.target.closest("[data-item-type][data-id]");
+    if (!target || !currentUser || document.querySelector("dialog[open]")) { hideSiteMenu(); return; }
+    event.preventDefault();
+    showSiteMenu(event.clientX, event.clientY, itemMenuItems(target.dataset.itemType, target.dataset.id), "Opções da atividade");
   });
 
   document.getElementById("quick-add").addEventListener("click", () => openDialog("task-dialog"));
@@ -800,12 +1030,27 @@ function initializeEvents() {
   document.getElementById("habit-schedule-mode").addEventListener("change", updateHabitScheduleFields);
   document.querySelectorAll("[data-dialog-cancel]").forEach((button)=>button.addEventListener("click",()=>requestDialogClose(button.closest("dialog"))));
   document.querySelectorAll("#task-dialog,#goal-dialog,#habit-dialog").forEach((dialog)=>dialog.addEventListener("cancel",(event)=>{event.preventDefault();requestDialogClose(dialog);}));
-  document.getElementById("calendar-grid").addEventListener("click",(event)=>{
-    const day=event.target.closest("[data-calendar-date]");
-    if(day){selectedCalendarDate=day.dataset.calendarDate;renderCalendar();}
+  const calendarGrid = document.getElementById("calendar-grid");
+  calendarGrid.addEventListener("click", (event) => {
+    const add = event.target.closest("[data-calendar-add]");
+    if (add) { openAddMenu(add.dataset.calendarAdd, add); return; }
+    const day = event.target.closest("[data-calendar-date]");
+    if (day) { selectedCalendarDate = day.dataset.calendarDate; renderCalendar(); }
   });
-  document.querySelectorAll("[data-calendar-shift]").forEach((button)=>button.addEventListener("click",()=>{
-    const date=dateFromKey(calendarCursor);date.setUTCMonth(date.getUTCMonth()+Number(button.dataset.calendarShift));calendarCursor=date.toISOString().slice(0,7)+"-01";renderCalendar();
+  calendarGrid.addEventListener("keydown", (event) => {
+    if ((event.key === "Enter" || event.key === " ") && event.target.matches("[data-calendar-date]")) {
+      event.preventDefault(); selectedCalendarDate = event.target.dataset.calendarDate; renderCalendar();
+      const again = calendarGrid.querySelector('[data-calendar-date="' + selectedCalendarDate + '"]'); if (again) again.focus();
+    }
+  });
+  document.getElementById("calendar-add").addEventListener("click", (event) => openAddMenu(selectedCalendarDate || today, event.currentTarget));
+  document.getElementById("calendar-selected-details").addEventListener("toggle", (event) => {
+    const group = event.target.closest("details[data-group]");
+    if (group) calendarGroupOpen[group.dataset.group] = group.open;
+  }, true);
+  document.querySelectorAll("[data-calendar-shift]").forEach((button) => button.addEventListener("click", () => {
+    const date = dateFromKey(calendarCursor); date.setUTCMonth(date.getUTCMonth() + Number(button.dataset.calendarShift));
+    calendarCursor = date.toISOString().slice(0, 7) + "-01"; renderCalendar();
   }));
 }
 
